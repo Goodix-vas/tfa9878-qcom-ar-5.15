@@ -1,0 +1,16 @@
+menu "Goodix TFA9878 amplifier configuration"
+
+if SND_SOC_TFA9878
+
+config PLATFORM_QUALCOMM
+        bool "Qualcomm platform support"
+        default y
+        help
+          Enable compile options for Qualcomm platform.
+          It adapts codec driver to the target platform.
+          It encloses the options, used in codec driver, for Qualcomm platform.
+          It differs the configuration between Qualcom platform and the others.
+
+endif # SND_SOC_TFA9878
+
+endmenu
