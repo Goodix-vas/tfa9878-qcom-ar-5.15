@@ -73,6 +73,8 @@ int tfa_is_active_device(struct tfa_device *tfa);
 
 void tfa_handle_damaged_speakers(struct tfa_device *tfa);
 
+enum tfa98xx_error tfa_run_cal(int index, uint16_t *value);
+
 int tfa_wait_until_calibration_done(struct tfa_device *tfa);
 
 #endif /* __TFA_INTERNAL_H__ */

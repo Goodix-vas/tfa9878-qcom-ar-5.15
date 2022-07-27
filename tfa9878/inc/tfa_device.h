@@ -202,6 +202,7 @@ struct tfa_device {
 	char fw_lib_ver[3];
 	int irq_all;
 	int irq_max;
+	int disable_auto_cal;
 	int inchannel;
 };
 

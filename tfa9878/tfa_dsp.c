@@ -4115,6 +4115,7 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 			forced = 1;
 			tfa->reset_mtpex = 1;
 		}
+		cal_ready &= (tfa->disable_auto_cal) ? 0 : 1;
 		if (cal_ready) {
 			cal_profile = tfa_cont_get_cal_profile(tfa);
 			if (cal_profile >= 0) {
@@ -5219,6 +5220,7 @@ int tfa_dev_probe(int resp_addr, struct tfa_device *tfa)
 
 	tfa->in_use = 1;
 	tfa->is_calibrating = 0;
+	tfa->disable_auto_cal = 1;
 
 	tfa->dev_count = tfa->cnt->ndev;
 

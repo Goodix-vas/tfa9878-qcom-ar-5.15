@@ -408,6 +408,8 @@ int tfa_calibrate(struct tfa_device *tfa);
 void tfa98xx_set_exttemp(struct tfa_device *tfa, short ext_temp);
 short tfa98xx_get_exttemp(struct tfa_device *tfa);
 
+enum tfa98xx_error tfa98xx_read_reference_temp(short *value);
+
 /* control the volume of the DSP
  * @param vol volume in bit field. It must be between 0 and 255
  */

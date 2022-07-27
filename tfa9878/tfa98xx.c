@@ -45,6 +45,9 @@
 #include "inc/tfa98xx_genregs_N1C.h"
 #endif
 
+#include <linux/power_supply.h>
+#define REF_TEMP_DEVICE_NAME "battery"
+
 #define TFA98XX_VERSION	TFA98XX_API_REV_STR
 
 /* Change volume selection behavior:
@@ -341,6 +344,10 @@ static int tfa98xx_dbgfs_mtpex_set(void *data, u64 val)
 	struct i2c_client *i2c = (struct i2c_client *)data;
 	struct tfa98xx *tfa98xx = i2c_get_clientdata(i2c);
 	enum tfa_error err;
+	enum tfa98xx_error ret;
+	u16 temp_val = DEFAULT_REF_TEMP;
+	int idx, ndev;
+	struct tfa_device *ntfa = NULL;
 
 	if (tfa98xx->tfa->tfa_family == 0) {
 		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
@@ -352,6 +359,19 @@ static int tfa98xx_dbgfs_mtpex_set(void *data, u64 val)
 		pr_err("[0x%x] Can only clear MTPEX (0 value expected)\n",
 			tfa98xx->i2c->addr);
 		return -EINVAL;
+	}
+
+	/* EXT_TEMP */
+	ret = tfa98xx_read_reference_temp(&temp_val);
+	if (ret)
+		pr_err("error in reading reference temp\n");
+
+	ndev = tfa98xx->tfa->dev_count;
+	for (idx = 0; idx < ndev; idx++) {
+		ntfa = tfa98xx_get_tfa_device_from_index(idx);
+		if (ntfa == NULL)
+			continue;
+		tfa98xx_set_exttemp(ntfa, (short)temp_val);
 	}
 
 	mutex_lock(&tfa98xx->dsp_lock);
@@ -1343,6 +1363,7 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 	int cal_profile = 0;
 	u64 otc_val = 1; /* calibration once by default */
 	u16 temp_val = DEFAULT_REF_TEMP; /* default */
+	int temp_calflag = 0;
 
 	pr_info("%s: begin\n", __func__);
 
@@ -1350,6 +1371,14 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 		pr_info("[0x%x] %s: calibration is available only when channel is enabled!\n",
 			tfa98xx0->i2c->addr, __func__);
 		return -EIO;
+	}
+
+	/* EXT_TEMP */
+	ret = tfa98xx_read_reference_temp(&temp_val);
+	if (ret) {
+		pr_err("%s: error in reading reference temp\n",
+			__func__);
+		temp_val = DEFAULT_REF_TEMP; /* default */
 	}
 
 	for (idx = 0; idx < ndev; idx++) {
@@ -1374,6 +1403,13 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 		ret = tfa_dev_mtp_set(tfa, TFA_MTP_RE25, 0);
 		/* EXT_TEMP */
 		tfa98xx_set_exttemp(tfa, temp_val);
+
+		pr_info("%s: dev %d - force to enable auto calibration (%s -> enabled)",
+			__func__, idx,
+			(tfa->disable_auto_cal) ? "disabled" : "enabled");
+		/* enable auto calibration */
+		temp_calflag |= tfa->disable_auto_cal;
+		tfa->disable_auto_cal = 0;
 
 		/* force to enable all the devices */
 		if (tfa->dev_count <= MAX_CHANNELS)
@@ -1436,17 +1472,62 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
 
+	pr_info("%s: restore flag for auto calibration (enabled -> %s)",
+		__func__,
+		(temp_calflag) ? "disabled" : "enabled");
+	for (idx = 0; idx < ndev; idx++) {
+		tfa = tfa98xx_get_tfa_device_from_index(idx);
+		if (tfa == NULL)
+			continue;
+
+		/* restore flag for auto calibration */
+		tfa->disable_auto_cal = temp_calflag;
+	}
+
 	if (cal_err) {
 		pr_info("%s: calibration failed! (err %d)\n",
 			__func__, cal_err);
 		return -EIO;
 	}
 
-	pr_info("%s: calibration done!\n", __func__);
+	pr_info("%s: calibration triggered!\n", __func__);
 	pr_info("%s: end\n", __func__);
 
 	return 0;
 }
+
+enum tfa98xx_error tfa98xx_read_reference_temp(short *value)
+{
+	struct power_supply *psy = NULL;
+	union power_supply_propval prop_read = {0};
+	int ret = 0;
+
+	/* get power supply of "battery" */
+	/* value is preserved with default when error happens */
+	psy = power_supply_get_by_name(REF_TEMP_DEVICE_NAME);
+	if (!psy) {
+		pr_err("%s: failed to get power supply\n", __func__);
+		return TFA98XX_ERROR_FAIL;
+	}
+
+	ret = power_supply_get_property(psy,
+		POWER_SUPPLY_PROP_TEMP, &prop_read);
+	if (ret) {
+		pr_err("%s: failed to get temp property\n", __func__);
+		if (psy)
+			power_supply_put(psy);
+		return TFA98XX_ERROR_FAIL;
+	}
+
+	*value = (short)(prop_read.intval / 10); /* in degC */
+	pr_info("%s: read temp (%d) from %s\n",
+		__func__, *value, REF_TEMP_DEVICE_NAME);
+	if (psy)
+		power_supply_put(psy);
+
+	return TFA98XX_ERROR_OK;
+}
+EXPORT_SYMBOL(tfa98xx_read_reference_temp);
 
 static void tfa98xx_set_dsp_configured(struct tfa98xx *tfa98xx)
 {
@@ -4330,6 +4411,72 @@ static ssize_t tfa98xx_gain_store(struct device *dev,
 	return count;
 }
 
+static ssize_t tfa98xx_autocal_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct tfa98xx *tfa98xx = dev_get_drvdata(dev);
+	struct tfa_device *tfa = NULL;
+	int count = 0;
+
+	tfa = tfa98xx->tfa;
+	if (!tfa)
+		return -ENODEV;
+	if (tfa->tfa_family == 0) {
+		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
+			tfa98xx->i2c->addr, __func__);
+		return -EIO;
+	}
+
+	pr_debug("[0x%x] autocal : %s\n",
+		tfa98xx->i2c->addr,
+		(tfa->disable_auto_cal) ? "disabled" : "enabled");
+	count = snprintf(buf, PAGE_SIZE, "%s\n",
+		(tfa->disable_auto_cal) ? "0 (disabled)" : "1 (enabled)");
+
+	return count;
+}
+
+static ssize_t tfa98xx_autocal_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tfa98xx *tfa98xx = dev_get_drvdata(dev);
+	struct tfa_device *tfa = NULL;
+	int enable = 0;
+
+	if (tfa98xx->tfa->tfa_family == 0) {
+		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
+			tfa98xx->i2c->addr, __func__);
+		return -EIO;
+	}
+
+	/* check string length, and account for eol */
+	if (count < 1)
+		return -EINVAL;
+
+	if (!strncmp(buf, "1", 1))
+		enable = 1;
+	else if (!strncmp(buf, "0", 1))
+		enable = 0;
+	else {
+		pr_info("%s: autocal is triggered with %s!\n", __func__, buf);
+		return -EINVAL;
+	}
+
+	pr_info("%s: autocal < %d\n", __func__, enable);
+
+	mutex_lock(&tfa98xx_mutex);
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		tfa = tfa98xx->tfa;
+		if (tfa == NULL)
+			continue;
+
+		tfa->disable_auto_cal = (enable) ? 0 : 1;
+	}
+	mutex_unlock(&tfa98xx_mutex);
+
+	return count;
+}
+
 static struct bin_attribute dev_attr_rw = {
 	.attr = {
 		.name = "rw",
@@ -4357,6 +4504,15 @@ static struct device_attribute dev_attr_gain = {
 	},
 	.show = tfa98xx_gain_show,
 	.store = tfa98xx_gain_store,
+};
+
+static struct device_attribute dev_attr_autocal = {
+	.attr = {
+		.name = "autocal",
+		.mode = 0600,
+	},
+	.show = tfa98xx_autocal_show,
+	.store = tfa98xx_autocal_store,
 };
 
 struct tfa_device *tfa98xx_get_tfa_device_from_index(int index)
@@ -4423,6 +4579,30 @@ int tfa98xx_count_active_stream(int stream_flag)
 	return stream_counter;
 }
 
+enum tfa98xx_error tfa_run_cal(int index, uint16_t *value)
+{
+	struct tfa_device *tfa = tfa98xx_get_tfa_device_from_index(index);
+	struct tfa98xx *tfa98xx;
+	int ret = 0;
+
+	if (!tfa)
+		return TFA98XX_ERROR_NOT_OPEN;
+
+	tfa98xx = (struct tfa98xx *)tfa->data;
+
+	/* check if calibration already runs */
+	tfa_wait_until_calibration_done(tfa);
+
+	ret = tfa98xx_run_calibration(tfa98xx);
+	if (ret < 0)
+		return TFA98XX_ERROR_FAIL;
+
+	if (value == NULL)
+		return TFA98XX_ERROR_BAD_PARAMETER;
+
+	return TFA98XX_ERROR_OK;
+}
+EXPORT_SYMBOL(tfa_run_cal);
 
 int tfa98xx_set_blackbox(int enable)
 {
@@ -4730,6 +4910,10 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	ret = device_create_file(&i2c->dev, &dev_attr_gain);
 	if (ret)
 		dev_info(&i2c->dev, "error creating sysfs node, gain\n");
+
+	ret = device_create_file(&i2c->dev, &dev_attr_autocal);
+	if (ret)
+		dev_info(&i2c->dev, "error creating sysfs node, autocal\n");
 
 	pr_info("%s Probe completed successfully!\n", __func__);
 
