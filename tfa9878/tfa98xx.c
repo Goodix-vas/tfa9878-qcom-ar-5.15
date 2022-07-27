@@ -4674,6 +4674,44 @@ int tfa98xx_get_blackbox_data_index_channel(int channel,
 	return tfa98xx_get_blackbox_data_index(dev, index, reset);
 }
 
+int tfa_get_power_state(int index)
+{
+	struct tfa_device *tfa = tfa98xx_get_tfa_device_from_index(index);
+	int pm = 0;
+	int state = 0, control = 0;
+
+	if (tfa == NULL)
+		return 0; /* unused device */
+
+	state = TFA7x_GET_BF(tfa, LP0);
+	control = TFA7x_GET_BF(tfa, IPM);
+	if ((control == 0x0 || control == 0x3)
+		&& (state == 0x1))
+		pm |= 0x2; /* idle power */
+	switch (tfa->rev & 0xff) {
+	case 0x78:
+	case 0x74:
+	case 0x72:
+	case 0x94:
+		state = TFA7x_GET_BF(tfa, LP1);
+		control = TFA7x_GET_BF(tfa, LPM1MODE);
+		if ((control == 0x0 || control == 0x3)
+			&& (state == 0x1))
+			pm |= 0x1; /* low power */
+		break;
+	default:
+		/* neither TFA987x */
+		break;
+	}
+
+	state = TFA_GET_BF(tfa, PWDN);
+	if (state == 1)
+		pm |= 0x4; /* power down */
+
+	return pm;
+}
+EXPORT_SYMBOL(tfa_get_power_state);
+
 static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	const struct i2c_device_id *id)
 {

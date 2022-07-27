@@ -27,6 +27,8 @@ static int __init tfa98xx_sysfs_init(void)
 
 	ret = tfa98xx_cal_init(g_tfa_class);
 
+	ret = tfa98xx_stc_init(g_tfa_class);
+
 	return ret;
 }
 module_init(tfa98xx_sysfs_init);
@@ -34,6 +36,8 @@ module_init(tfa98xx_sysfs_init);
 static void __exit tfa98xx_sysfs_exit(void)
 {
 	tfa98xx_cal_exit(g_tfa_class);
+
+	tfa98xx_stc_exit(g_tfa_class);
 
 	class_destroy(g_tfa_class);
 	pr_info("exited\n");

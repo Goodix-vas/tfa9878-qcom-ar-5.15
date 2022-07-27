@@ -8,6 +8,10 @@ endif
 TFA_VERSION              =tfa9878
 TFA_USE_TFA_CLASS        =1
 TFA_USE_TFACAL_NODE      =1
+TFA_USE_TFASTC_NODE      =1
+ifeq ($(CONFIG_TFA_STEREO_NODE),y)
+TFA_STEREO_NODE          =1
+endif
 
 TFA98XX_FLAGS            := -DUSE_TFA9878
 ifeq ($(CONFIG_PLATFORM_QUALCOMM),y)
@@ -17,6 +21,9 @@ endif
 # cc flags
 #ccflags-y              := -DDEBUG
 ccflags-y               += -Werror
+ifdef TFA_STEREO_NODE
+ccflags-y               += -DTFA_STEREO_NODE
+endif
 
 # objs
 snd-soc-tfa98xx-objs    := tfa98xx.o
@@ -39,6 +46,13 @@ else
 snd-soc-tfa98xx-objs    += tfa_cal.o
 endif
 endif
+ifdef TFA_USE_TFASTC_NODE
+ifdef TFA_KERNEL_MODULE
+snd-soc-tfa_sysfs-objs  += tfa_stc.o
+else
+snd-soc-tfa98xx-objs    += tfa_stc.o
+endif
+endif
 endif
 
 # CFLAGS
@@ -53,6 +67,9 @@ ifdef TFA_USE_TFA_CLASS
 CFLAGS_tfa_sysfs.o     += $(TFA98XX_FLAGS)
 ifdef TFA_USE_TFACAL_NODE
 CFLAGS_tfa_cal.o       += $(TFA98XX_FLAGS)
+endif
+ifdef TFA_USE_TFASTC_NODE
+CFLAGS_tfa_stc.o       += $(TFA98XX_FLAGS)
 endif
 endif
 
