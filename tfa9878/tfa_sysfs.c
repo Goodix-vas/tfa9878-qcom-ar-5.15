@@ -12,7 +12,7 @@
 
 static struct class *g_tfa_class;
 
-int tfa98xx_sysfs_init(void)
+static int __init tfa98xx_sysfs_init(void)
 {
 	int ret = 0;
 
@@ -31,8 +31,9 @@ int tfa98xx_sysfs_init(void)
 
 	return ret;
 }
+module_init(tfa98xx_sysfs_init);
 
-void tfa98xx_sysfs_exit(void)
+static void __exit tfa98xx_sysfs_exit(void)
 {
 	tfa98xx_cal_exit(g_tfa_class);
 
@@ -41,3 +42,8 @@ void tfa98xx_sysfs_exit(void)
 	class_destroy(g_tfa_class);
 	pr_info("exited\n");
 }
+module_exit(tfa98xx_sysfs_exit);
+
+MODULE_DESCRIPTION("ASoC TFA98XX sysfs node driver");
+MODULE_LICENSE("GPL");
+

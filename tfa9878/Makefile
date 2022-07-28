@@ -34,12 +34,24 @@ ifdef TFA_DEBUG
 snd-soc-tfa98xx-objs    += tfa_debug.o
 endif
 ifdef TFA_USE_TFA_CLASS
+ifdef TFA_KERNEL_MODULE
+snd-soc-tfa_sysfs-objs  += tfa_sysfs.o
+else
 snd-soc-tfa98xx-objs    += tfa_sysfs.o
+endif
 ifdef TFA_USE_TFACAL_NODE
+ifdef TFA_KERNEL_MODULE
+snd-soc-tfa_sysfs-objs  += tfa_cal.o
+else
 snd-soc-tfa98xx-objs    += tfa_cal.o
 endif
+endif
 ifdef TFA_USE_TFASTC_NODE
+ifdef TFA_KERNEL_MODULE
+snd-soc-tfa_sysfs-objs  += tfa_stc.o
+else
 snd-soc-tfa98xx-objs    += tfa_stc.o
+endif
 endif
 endif
 
@@ -64,6 +76,9 @@ endif
 ifdef TFA_KERNEL_MODULE
 # module driver
 obj-m   := snd-soc-tfa98xx.o
+ifdef TFA_USE_TFA_CLASS
+obj-m   += snd-soc-tfa_sysfs.o
+endif
 else
 # built-in driver
 obj-y	+= snd-soc-tfa98xx.o

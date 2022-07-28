@@ -5061,8 +5061,6 @@ static int __init tfa98xx_i2c_init(void)
 
 	ret = i2c_add_driver(&tfa98xx_i2c_driver);
 
-	ret = tfa98xx_sysfs_init();
-
 	return ret;
 }
 module_init(tfa98xx_i2c_init);
@@ -5071,8 +5069,6 @@ static void __exit tfa98xx_i2c_exit(void)
 {
 	i2c_del_driver(&tfa98xx_i2c_driver);
 	kmem_cache_destroy(tfa98xx_cache);
-
-	tfa98xx_sysfs_exit();
 }
 module_exit(tfa98xx_i2c_exit);
 

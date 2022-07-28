@@ -79,8 +79,5 @@ int tfa_get_power_state(int index);
 
 int tfa_wait_until_calibration_done(struct tfa_device *tfa);
 
-int tfa98xx_sysfs_init(void);
-void tfa98xx_sysfs_exit(void);
-
 #endif /* __TFA_INTERNAL_H__ */
 
