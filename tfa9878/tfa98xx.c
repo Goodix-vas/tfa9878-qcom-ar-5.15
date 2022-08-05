@@ -2475,6 +2475,58 @@ static int tfa98xx_set_spkgain(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
+static int tfa98xx_info_ipcid(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 2;
+	uinfo->value.integer.min = 0x0;
+	uinfo->value.integer.max = 0xffffffff;
+
+	return 0;
+}
+
+static int tfa98xx_get_ipcid(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa_device *tfa = tfa98xx_get_tfa_device_from_index(0);
+	uint32_t ipcid_value = 0;
+
+	if (tfa == NULL)
+		return 0;
+
+	mutex_lock(&tfa98xx_mutex);
+	ipcid_value = (uint32_t)(((tfa->ipcid[0] & 0xffff) << 16)
+		| (tfa->ipcid[1] & 0xffff));
+	ucontrol->value.integer.value[0] = ipcid_value;
+	ucontrol->value.integer.value[1] = tfa->ipcid[2];
+	mutex_unlock(&tfa98xx_mutex);
+
+	return 0;
+}
+
+static int tfa98xx_set_ipcid(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa_device *tfa = tfa98xx_get_tfa_device_from_index(0);
+	uint32_t ipcid_value = 0;
+
+	if (tfa == NULL)
+		return 1;
+
+	mutex_lock(&tfa98xx_mutex);
+	ipcid_value = (uint32_t)ucontrol->value.integer.value[0];
+	tfa->ipcid[0] = (ipcid_value >> 16) & 0xffff;
+	tfa->ipcid[1] = ipcid_value & 0xffff;
+	tfa->ipcid[2] = (uint32_t)ucontrol->value.integer.value[1];
+
+	pr_info("%s: set_ipcid PCM%03d:%d:0x%08x\n",
+		__func__, tfa->ipcid[0], tfa->ipcid[1], tfa->ipcid[2]);
+	mutex_unlock(&tfa98xx_mutex);
+
+	return 1;
+}
+
 static int tfa98xx_info_cal_ctl(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_info *uinfo)
 {
@@ -2559,6 +2611,7 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	nr_controls += 1; /* set mute */
 	nr_controls += 1; /* set pause */
 	nr_controls += 1; /* set speaker gain */
+	nr_controls += 1; /* set ipcid */
 
 	if (tfa98xx->flags & TFA98XX_FLAG_CALIBRATION_CTL)
 		nr_controls += 1; /* calibration */
@@ -2727,6 +2780,19 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	tfa98xx_controls[mix_index].info = tfa98xx_info_spkgain;
 	tfa98xx_controls[mix_index].get = tfa98xx_get_spkgain;
 	tfa98xx_controls[mix_index].put = tfa98xx_set_spkgain;
+	mix_index++;
+
+	/* get connection for IPC (PCM_ID:VMIXER_CARD:INSTANCE_ID) */
+	name = devm_kzalloc(cdev, MAX_CONTROL_NAME, GFP_KERNEL);
+	if (!name)
+		return -ENOMEM;
+
+	scnprintf(name, MAX_CONTROL_NAME, "%s IPC_ID", tfa98xx->fw.name);
+	tfa98xx_controls[mix_index].name = name;
+	tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	tfa98xx_controls[mix_index].info = tfa98xx_info_ipcid;
+	tfa98xx_controls[mix_index].get = tfa98xx_get_ipcid;
+	tfa98xx_controls[mix_index].put = tfa98xx_set_ipcid;
 	mix_index++;
 
 	if (tfa98xx->flags & TFA98XX_FLAG_CALIBRATION_CTL) {
@@ -3294,7 +3360,7 @@ static void tfa98xx_container_loaded
 
 /* TEMPORARY, until TFA device is probed before tfa_ext is called */
 	if (tfa98xx->tfa->is_probus_device) {
-		/* Q_PLATFORM: IPC TO COMMUNICATE BETWEEN KERNEL AND ADSP */
+		/* Q_PLATFORM: IPC ON PAL TO COMMUNICATE BETWEEN HAL AND ADSP */
 		tfa98xx->tfa->dev_ops.dsp_msg
 			= (dsp_send_message_t)NULL;
 		tfa98xx->tfa->dev_ops.dsp_msg_read

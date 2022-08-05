@@ -204,6 +204,7 @@ struct tfa_device {
 	int irq_max;
 	int disable_auto_cal;
 	int inchannel;
+	int ipcid[3];
 };
 
 #if defined(TFA_STEREO_NODE)
