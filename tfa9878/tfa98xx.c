@@ -3675,6 +3675,7 @@ static void tfa98xx_set_irq_status(struct tfa98xx *tfa98xx,
 	tfa98xx->istatus &= ~mask;
 	tfa98xx->istatus |= (flag & 0x1) << (bit & 0x0f);
 
+	/* value: 0 (active high) / 1 (active low) */
 	tfa_irq_set_pol(tfa98xx->tfa, bit, (value == 0) ? 1 : 0);
 	tfa_irq_clear(tfa98xx->tfa, bit);
 
@@ -3705,7 +3706,7 @@ static void tfa98xx_interrupt(struct work_struct *work)
 			pr_err("%s: OTP is %s!\n", __func__,
 				(value == 0) ? "detected" : "restored");
 			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stotds,
-				value, (value == 0) ? 1 : 0);
+				0, (value == 0) ? 1 : 0);
 		}
 		if (tfa_irq_get(tfa98xx->tfa, tfa9878_irq_stocpr)) {
 			/* clear at read */
@@ -3713,7 +3714,7 @@ static void tfa98xx_interrupt(struct work_struct *work)
 			pr_err("%s: OCP is %s!\n", __func__,
 				(value == 1) ? "detected" : "restored");
 			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stocpr,
-				value, (value == 1) ? 1 : 0);
+				0, (value == 1) ? 1 : 0);
 		}
 		if (tfa_irq_get(tfa98xx->tfa, tfa9878_irq_stuvds)) {
 			/* clear at read */
@@ -3721,7 +3722,7 @@ static void tfa98xx_interrupt(struct work_struct *work)
 			pr_err("%s: UVP is %s!\n", __func__,
 				(value == 0) ? "detected" : "restored");
 			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stuvds,
-				value, (value == 0) ? 1 : 0);
+				0, (value == 0) ? 1 : 0);
 		}
 		if (tfa_irq_get(tfa98xx->tfa, tfa9878_irq_stmanalarm)) {
 			/* clear at read */
@@ -3729,7 +3730,7 @@ static void tfa98xx_interrupt(struct work_struct *work)
 			pr_err("%s: Alarm state is %s!\n", __func__,
 				(value == 1) ? "detected" : "restored");
 			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stmanalarm,
-				value, (value == 1) ? 1 : 0);
+				0, (value == 1) ? 1 : 0);
 		}
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
