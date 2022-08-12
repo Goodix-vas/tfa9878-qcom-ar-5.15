@@ -193,7 +193,7 @@ static enum tfa_error tfa98xx_write_re25(struct tfa_device *tfa, int value)
 	}
 	if (err == tfa_error_ok) {
 		/* set MTPEX to copy RE25 into MTP */
-		err = tfa_dev_mtp_set(tfa, TFA_MTP_EX, 2);
+		err = tfa_dev_mtp_set(tfa, TFA_MTP_EX, 1);
 	}
 
 	return err;
@@ -1361,7 +1361,6 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 	enum tfa_error ret, cal_err = tfa_error_ok;
 	int idx, ndev = tfa98xx_device_count;
 	int cal_profile = 0;
-	u64 otc_val = 1; /* calibration once by default */
 	u16 temp_val = DEFAULT_REF_TEMP; /* default */
 	int temp_calflag = 0;
 
@@ -1385,24 +1384,6 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 		tfa = tfa98xx_get_tfa_device_from_index(idx);
 		if (tfa == NULL)
 			continue;
-
-		pr_info("%s: dev %d - resetting MTP\n", __func__, idx);
-
-		/* OTC <0:always 1:once> */
-		ret = tfa_dev_mtp_set(tfa, TFA_MTP_OTC, otc_val);
-		if (ret)
-			pr_info("setting OTC failed (%d)\n", ret);
-		/* MTPEX <reset to force to calibrate> */
-		ret = tfa_dev_mtp_set(tfa, TFA_MTP_EX, 0);
-		if (ret) {
-			pr_info("resetting MTPEX failed (%d)\n", ret);
-			/* suspend until TFA98xx is active */
-			tfa->reset_mtpex = 1;
-		}
-		/* MTPEX <reset to force to calibrate> */
-		ret = tfa_dev_mtp_set(tfa, TFA_MTP_RE25, 0);
-		/* EXT_TEMP */
-		tfa98xx_set_exttemp(tfa, temp_val);
 
 		pr_info("%s: dev %d - force to enable auto calibration (%s -> enabled)",
 			__func__, idx,
@@ -3464,6 +3445,10 @@ static void tfa98xx_container_loaded
 		}
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
+
+	/* set MTP_EX and MTP_RE25 by force */
+	tfa98xx->set_mtp_cal = true;
+	tfa98xx->cal_data = DUMMY_CALIBRATION_DATA;
 
 	tfa98xx_interrupt_enable(tfa98xx, true);
 
