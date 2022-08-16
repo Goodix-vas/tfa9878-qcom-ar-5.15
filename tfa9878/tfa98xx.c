@@ -1452,6 +1452,10 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 			cal_err |= ret;
 		}
 
+		pr_debug("%s: [%d] force UNMUTE before calibration\n",
+			__func__, tfa->dev_idx);
+		tfa_dev_set_state(tfa, TFA_STATE_UNMUTE, 1);
+
 		tfa98xx->dsp_init = TFA98XX_DSP_INIT_DONE;
 		tfa98xx_set_dsp_configured(tfa98xx);
 
