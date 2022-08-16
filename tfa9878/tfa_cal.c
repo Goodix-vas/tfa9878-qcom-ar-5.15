@@ -25,7 +25,7 @@ static ssize_t config_show(struct device *dev,
 	struct device_attribute *attr, char *buf);
 static ssize_t config_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size);
-static DEVICE_ATTR_RW(config);
+static DEVICE_ATTR(config, 0664, config_show, config_store);
 
 static struct attribute *tfa_cal_attr[] = {
 	&dev_attr_ref_temp.attr,
