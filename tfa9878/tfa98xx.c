@@ -222,16 +222,21 @@ tfa98xx_tfa_start(struct tfa98xx *tfa98xx, int next_profile, int vstep)
 	}
 
 	if ((err == tfa_error_ok) && (tfa98xx->set_mtp_cal)) {
-		enum tfa_error err_cal;
+		enum tfa_error err_cal = tfa_error_ok;
 
-		err_cal = tfa98xx_write_re25(tfa98xx->tfa, tfa98xx->cal_data);
+		if (tfa98xx->tfa->mtpex != 1)
+			err_cal = tfa98xx_write_re25(tfa98xx->tfa,
+				tfa98xx->cal_data);
+		tfa98xx->tfa->mtpex = tfa_dev_mtp_get(tfa98xx->tfa,
+			TFA_MTP_EX);
 		if (err_cal != tfa_error_ok) {
-			pr_err("Error, setting calibration value in mtp, err=%d\n",
-				err_cal);
+			pr_err("%s: Error, setting MTPEX on dev %d by force, err=%d\n",
+				__func__, tfa98xx->tfa->dev_idx, err_cal);
 		} else {
 			tfa98xx->set_mtp_cal = false;
-			pr_info("Calibration value (%d) set in mtp\n",
-				tfa98xx->cal_data);
+			pr_info("%s: MTPEX: %d on dev %d\n",
+				__func__, tfa98xx->tfa->mtpex,
+				tfa98xx->tfa->dev_idx);
 		}
 	}
 
@@ -3446,9 +3451,11 @@ static void tfa98xx_container_loaded
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
 
-	/* set MTP_EX and MTP_RE25 by force */
-	tfa98xx->set_mtp_cal = true;
-	tfa98xx->cal_data = DUMMY_CALIBRATION_DATA;
+	if (!tfa98xx->calibrate_done) {
+		/* set MTP_EX and MTP_RE25 by force */
+		tfa98xx->set_mtp_cal = true;
+		tfa98xx->cal_data = DUMMY_CALIBRATION_DATA;
+	}
 
 	tfa98xx_interrupt_enable(tfa98xx, true);
 
