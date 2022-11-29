@@ -2135,12 +2135,12 @@ enum tfa98xx_error tfa_cont_write_profile(struct tfa_device *tfa,
 
 	/* set new settings */
 	for (i = 0; i < prof->length; i++) {
-		/* Remember where we currently are with writing items*/
-		j = i;
-
 		/* only to write the values before default section
 		 * when we switch profile
 		 */
+		if (prof->list[i].type == dsc_default)
+			break;
+
 		/* process and write all non-file items */
 		switch (prof->list[i].type) {
 		case dsc_file:
@@ -2158,11 +2158,13 @@ enum tfa98xx_error tfa_cont_write_profile(struct tfa_device *tfa,
 		case dsc_set_vddp_config:
 		case dsc_cmd:
 		case dsc_filter:
-		case dsc_default:
 			/* Skip files / commands and continue */
 			/* i = prof->length; */
 			break;
 		default:
+			/* Remember where we currently are with writing items*/
+			j = i;
+
 			err = tfa_cont_write_item(tfa, &prof->list[i]);
 			if (err != TFA98XX_ERROR_OK) {
 				pr_err("%s: Error in writing items!\n",
@@ -2261,6 +2263,9 @@ enum tfa98xx_error tfa_cont_write_profile(struct tfa_device *tfa,
 				tfa_cont_get_string(tfa->cnt,
 				&prof_tfadsp->name), prof_idx);
 	}
+
+	if (tfa->dev_tfadsp != -1)
+		j = 0; /* reset to begin from the head */
 
 	/* write everything
 	 * until end or the default section starts

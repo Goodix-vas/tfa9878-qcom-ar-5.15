@@ -3245,6 +3245,9 @@ static void tfa98xx_interrupt_enable_tfa2(struct tfa98xx *tfa98xx, bool enable)
 {
 	tfa98xx->istatus = 0;
 
+	/* clear all the events before enabling */
+	tfa_irq_clear(tfa98xx->tfa, tfa98xx->tfa->irq_all);
+
 	tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stotds, enable);
 	tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stocpr, enable);
 	tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stuvds, enable);
@@ -3279,6 +3282,7 @@ static void tfa98xx_container_loaded
 		mutex_unlock(&probe_lock);
 		return;
 	}
+
 	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
 
 	if (!cont) {
@@ -3452,6 +3456,7 @@ static void tfa98xx_container_loaded
 			if (tfa98xx->tfa->tfa_family == 2)
 				TFA_SET_BF(tfa98xx->tfa, MANSCONF, 1);
 		}
+		tfa_set_status_flag(tfa98xx->tfa, TFA_SET_DEVICE, 0);
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
 

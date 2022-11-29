@@ -1815,11 +1815,13 @@ enum tfa98xx_error tfa_dsp_cmd_id_write(struct tfa_device *tfa,
 	unsigned char *buffer;
 	int nr = 0;
 
-	buffer = kmem_cache_alloc(tfa->cachep, GFP_KERNEL);
-	if (buffer == NULL)
-		return TFA98XX_ERROR_FAIL;
-
 	mutex_lock(&dsp_msg_lock);
+
+	buffer = kmem_cache_alloc(tfa->cachep, GFP_KERNEL);
+	if (buffer == NULL) {
+		mutex_unlock(&dsp_msg_lock);
+		return TFA98XX_ERROR_FAIL;
+	}
 
 	buffer[nr++] = tfa->spkr_select;
 	buffer[nr++] = module_id + 0x80;
@@ -1832,9 +1834,9 @@ enum tfa98xx_error tfa_dsp_cmd_id_write(struct tfa_device *tfa,
 
 	error = dsp_msg(tfa, nr, (char *)buffer);
 
-	mutex_unlock(&dsp_msg_lock);
-
 	kmem_cache_free(tfa->cachep, buffer);
+
+	mutex_unlock(&dsp_msg_lock);
 
 	return error;
 }
@@ -3623,6 +3625,7 @@ enum tfa98xx_error tfa_wait_cal(struct tfa_device *tfa)
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
 	struct tfa_device *ntfa;
 	int i;
+	int active_profile = -1;
 
 	pr_info("%s: [%d] triggered\n",
 		__func__, tfa->dev_idx);
@@ -3663,12 +3666,11 @@ enum tfa98xx_error tfa_wait_cal(struct tfa_device *tfa)
 		pr_debug("%s: [%d] process calibration data\n",
 			__func__, ntfa->dev_idx);
 		err = tfa_dsp_get_calibration_impedance(ntfa);
-		if (err != TFA98XX_ERROR_OK) {
-			cal_err = err;
+		if (err != TFA98XX_ERROR_OK)
 			PRINT_ASSERT(err);
-		}
 
-		if (ntfa->next_profile == ntfa->profile
+		active_profile = tfa_dev_get_swprof(ntfa);
+		if (ntfa->next_profile == active_profile
 			|| ntfa->next_profile < 0)
 			continue;
 
@@ -3697,9 +3699,10 @@ enum tfa98xx_error tfa_wait_cal(struct tfa_device *tfa)
 
 		tfa_set_status_flag(ntfa, TFA_SET_DEVICE, 1);
 
+		active_profile = tfa_dev_get_swprof(ntfa);
 		pr_info("%s: [%d] restore profile after calibration (active %d; next %d)\n",
 			__func__, ntfa->dev_idx,
-			ntfa->profile, ntfa->next_profile);
+			active_profile, ntfa->next_profile);
 
 		/* switch profile */
 		if (cal_err != TFA98XX_ERROR_OK || calibration_done == 0) {
@@ -3712,6 +3715,8 @@ enum tfa98xx_error tfa_wait_cal(struct tfa_device *tfa)
 			if (err != TFA98XX_ERROR_OK)
 				pr_err("%s: error in writing regs (%d)\n",
 					__func__, err);
+			else if (TFA_GET_BF(ntfa, PWDN) != 0)
+				err = tfa98xx_powerdown(ntfa, 0);
 		} else {
 			/* with the entire setting in success case */
 			pr_info("%s: apply the whole profile setting at success\n",
@@ -3724,6 +3729,10 @@ enum tfa98xx_error tfa_wait_cal(struct tfa_device *tfa)
 					__func__, err);
 		}
 	}
+
+	/* reset counter */
+	tfa_set_status_flag(tfa, TFA_SET_DEVICE, -1);
+	tfa_set_status_flag(tfa, TFA_SET_CONFIG, -1);
 
 	return cal_err;
 }
@@ -4118,6 +4127,12 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 		cal_ready &= (tfa->disable_auto_cal) ? 0 : 1;
 		if (cal_ready) {
 			cal_profile = tfa_cont_get_cal_profile(tfa);
+			if (next_profile == cal_profile) {
+				tfa->next_profile
+					= (active_profile >= 0) ? active_profile : 0;
+				pr_info("%s: set next profile %d for dev %d, if cal profile is selected\n",
+					__func__, tfa->next_profile, tfa->dev_idx);
+			}
 			if (cal_profile >= 0) {
 				pr_info("%s: set profile for calibration profile %d\n",
 					__func__, cal_profile);
