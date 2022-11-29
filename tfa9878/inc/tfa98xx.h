@@ -53,6 +53,7 @@ enum tfa98xx_dsp_fw_state {
 	TFA98XX_DSP_FW_PENDING,
 	TFA98XX_DSP_FW_FAIL,
 	TFA98XX_DSP_FW_OK,
+	TFA98XX_DSP_FW_RELOADING,
 };
 
 struct tfa98xx_firmware {

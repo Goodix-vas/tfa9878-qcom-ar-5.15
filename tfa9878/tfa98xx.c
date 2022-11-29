@@ -77,6 +77,7 @@ static int tfa98xx_device_count;
 static int tfa98xx_sync_count;
 static int tfa98xx_monitor_count;
 #define MONITOR_COUNT_MAX 5
+static int tfa98xx_cnt_reload;
 
 static LIST_HEAD(profile_list); /* list of user selectable profiles */
 static int tfa98xx_mixer_profiles; /* number of user selectable profiles */
@@ -143,6 +144,9 @@ static void tfa98xx_check_calibration(struct tfa98xx *tfa98xx);
 static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx);
 
 static void tfa98xx_set_dsp_configured(struct tfa98xx *tfa98xx);
+
+static void tfa98xx_container_loaded
+	(const struct firmware *cont, void *context);
 
 struct tfa98xx_rate {
 	unsigned int rate;
@@ -2572,6 +2576,102 @@ static int tfa98xx_get_cal_ctl(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int tfa98xx_info_cnt_reload(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0x0;
+	uinfo->value.integer.max = 0xffffffff;
+
+	return 0;
+}
+
+static int tfa98xx_get_cnt_reload(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	mutex_lock(&probe_lock);
+	ucontrol->value.integer.value[0] = tfa98xx_cnt_reload;
+	mutex_unlock(&probe_lock);
+
+	return 0;
+}
+
+static int tfa98xx_set_cnt_reload(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa98xx *tfa98xx;
+	int tries, ret;
+
+	if (ucontrol != NULL)
+		if (ucontrol->value.integer.value[0] == 0)
+			return 1; /* do nothing */
+
+	/* free previously loaded one */
+	mutex_lock(&tfa98xx_mutex);
+	if (tfa98xx_container) {
+		kfree(tfa98xx_container);
+		tfa98xx_container = NULL;
+	}
+	mutex_unlock(&tfa98xx_mutex);
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		mutex_lock(&probe_lock);
+		if (tfa98xx->dsp_fw_state == TFA98XX_DSP_FW_OK) {
+			pr_info("%s: Reload continer file (previously %d) - dev %d\n",
+				__func__, tfa98xx_cnt_reload,
+				tfa98xx->tfa->dev_idx);
+			tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_RELOADING;
+		} else {
+			tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_PENDING;
+		}
+		mutex_unlock(&probe_lock);
+
+		tries = 0;
+
+		do {
+			ret = request_firmware_nowait(THIS_MODULE,
+				FW_ACTION_UEVENT,
+				fw_name, tfa98xx->dev, GFP_KERNEL,
+				tfa98xx, tfa98xx_container_loaded);
+			/* wait until driver completes loading */
+			msleep_interruptible(20);
+			if (tfa98xx->dsp_fw_state == TFA98XX_DSP_FW_OK)
+				break;
+
+			msleep_interruptible(80);
+			tries++;
+		} while (tries < TFA98XX_LOADFW_NTRIES
+			&& tfa98xx->dsp_fw_state != TFA98XX_DSP_FW_OK);
+
+		if ((ret != 0)
+			|| (tfa98xx->dsp_fw_state != TFA98XX_DSP_FW_OK))
+			/* skip preloading if it's not loaded yet */
+			continue;
+
+		/* Preload settings using internal clock on TFA2 */
+		if (tfa98xx->tfa->tfa_family == 2) {
+			mutex_lock(&tfa98xx->dsp_lock);
+			/* reload by force */
+			tfa98xx->tfa->first_after_boot = 1;
+			tfa98xx_set_stream_state(tfa98xx->tfa, 0);
+			ret = tfa98xx_tfa_start(tfa98xx,
+				tfa98xx->profile, tfa98xx->vstep);
+			if (ret == TFA98XX_ERROR_NOT_SUPPORTED) {
+				tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
+			} else {
+				/* reset cold amp state */
+				if (tfa98xx->tfa->tfa_family == 2)
+					TFA_SET_BF(tfa98xx->tfa, MANSCONF, 1);
+			}
+			tfa_set_status_flag(tfa98xx->tfa, TFA_SET_DEVICE, 0);
+			mutex_unlock(&tfa98xx->dsp_lock);
+		}
+	}
+
+	return 1;
+}
+
 static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 {
 	int prof, nprof, mix_index = 0;
@@ -2602,6 +2702,7 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	nr_controls += 1; /* set pause */
 	nr_controls += 1; /* set speaker gain */
 	nr_controls += 1; /* set ipcid */
+	nr_controls += 1; /* set cnt reload */
 
 	if (tfa98xx->flags & TFA98XX_FLAG_CALIBRATION_CTL)
 		nr_controls += 1; /* calibration */
@@ -2783,6 +2884,19 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	tfa98xx_controls[mix_index].info = tfa98xx_info_ipcid;
 	tfa98xx_controls[mix_index].get = tfa98xx_get_ipcid;
 	tfa98xx_controls[mix_index].put = tfa98xx_set_ipcid;
+	mix_index++;
+
+	/* reload container file to memory */
+	name = devm_kzalloc(cdev, MAX_CONTROL_NAME, GFP_KERNEL);
+	if (!name)
+		return -ENOMEM;
+
+	scnprintf(name, MAX_CONTROL_NAME, "%s Reload", tfa98xx->fw.name);
+	tfa98xx_controls[mix_index].name = name;
+	tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	tfa98xx_controls[mix_index].info = tfa98xx_info_cnt_reload;
+	tfa98xx_controls[mix_index].get = tfa98xx_get_cnt_reload;
+	tfa98xx_controls[mix_index].put = tfa98xx_set_cnt_reload;
 	mix_index++;
 
 	if (tfa98xx->flags & TFA98XX_FLAG_CALIBRATION_CTL) {
@@ -3283,10 +3397,12 @@ static void tfa98xx_container_loaded
 		return;
 	}
 
-	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
+	if (tfa98xx->dsp_fw_state != TFA98XX_DSP_FW_RELOADING)
+		tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
 
 	if (!cont) {
 		pr_err("Failed to read %s\n", fw_name);
+		tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
 		mutex_unlock(&probe_lock);
 		return;
 	}
@@ -3300,6 +3416,7 @@ static void tfa98xx_container_loaded
 			mutex_unlock(&tfa98xx_mutex);
 			release_firmware(cont);
 			pr_err("Error allocating memory\n");
+			tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
 			mutex_unlock(&probe_lock);
 			return;
 		}
@@ -3321,6 +3438,7 @@ static void tfa98xx_container_loaded
 			mutex_unlock(&tfa98xx_mutex);
 			kfree(container);
 			dev_err(tfa98xx->dev, "Cannot load container file, aborting\n");
+			tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
 			mutex_unlock(&probe_lock);
 			return;
 		}
@@ -3334,6 +3452,16 @@ static void tfa98xx_container_loaded
 	mutex_unlock(&tfa98xx_mutex);
 
 	tfa98xx->tfa->cnt = container;
+
+	if (tfa98xx->dsp_fw_state == TFA98XX_DSP_FW_RELOADING) {
+		if (tfa98xx->tfa->dev_idx == 0)
+			tfa98xx_cnt_reload++; /* increase reload counter */
+		pr_info("%s: Reloaded (%d) - dev %d\n",
+			__func__, tfa98xx_cnt_reload, tfa98xx->tfa->dev_idx);
+		tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_OK;
+		mutex_unlock(&probe_lock);
+		return;
+	}
 
 	/*
 	 * i2c transaction limited to 64k
@@ -4545,6 +4673,69 @@ static ssize_t tfa98xx_autocal_store(struct device *dev,
 	return count;
 }
 
+static ssize_t tfa98xx_reinit_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct tfa98xx *tfa98xx = dev_get_drvdata(dev);
+	struct tfa_device *tfa = NULL;
+	int count = 0, init_requests = -1;
+
+	tfa = tfa98xx->tfa;
+	if (!tfa)
+		return -ENODEV;
+	if (tfa->tfa_family == 0) {
+		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
+			tfa98xx->i2c->addr, __func__);
+		return -EIO;
+	}
+
+	init_requests = tfa98xx_cnt_reload;
+
+	pr_debug("[0x%x] reinit : counter %d\n",
+		tfa98xx->i2c->addr, init_requests);
+	count = snprintf(buf, PAGE_SIZE, "reinit requested: %d\n",
+		init_requests);
+
+	return count;
+}
+
+static ssize_t tfa98xx_reinit_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tfa98xx *tfa98xx = dev_get_drvdata(dev);
+	struct tfa_device *tfa = NULL;
+	int reinit = 0;
+
+	if (tfa98xx->tfa->tfa_family == 0) {
+		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
+			tfa98xx->i2c->addr, __func__);
+		return -EIO;
+	}
+
+	/* check string length, and account for eol */
+	if (count < 1)
+		return -EINVAL;
+
+	if (!strncmp(buf, "1", 1))
+		reinit = 1;
+	else if (!strncmp(buf, "0", 1))
+		reinit = 0;
+	else {
+		pr_info("%s: reinit is triggered with %s!\n", __func__, buf);
+		return -EINVAL;
+	}
+
+	pr_info("%s: reinit < %d\n", __func__, reinit);
+
+	if (reinit) {
+		pr_info("%s: started reloading / reinitializing (counter %d)\n",
+			__func__, tfa98xx_cnt_reload + 1);
+		tfa98xx_set_cnt_reload(NULL, NULL);
+	}
+
+	return count;
+}
+
 static struct bin_attribute dev_attr_rw = {
 	.attr = {
 		.name = "rw",
@@ -4581,6 +4772,15 @@ static struct device_attribute dev_attr_autocal = {
 	},
 	.show = tfa98xx_autocal_show,
 	.store = tfa98xx_autocal_store,
+};
+
+static struct device_attribute dev_attr_reinit = {
+	.attr = {
+		.name = "reinit",
+		.mode = 0600,
+	},
+	.show = tfa98xx_reinit_show,
+	.store = tfa98xx_reinit_store,
 };
 
 struct tfa_device *tfa98xx_get_tfa_device_from_index(int index)
