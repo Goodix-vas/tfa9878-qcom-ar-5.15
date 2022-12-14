@@ -30,7 +30,6 @@
 #include "inc/tfa.h"
 #include "inc/tfa_internal.h"
 
-/* required for enum tfa9912_irq */
 #include "inc/tfa98xx_tfafieldnames.h"
 
 #define TFA98XX_VERSION	TFA98XX_API_REV_STR
@@ -38,12 +37,6 @@
 #define I2C_RETRIES 50
 #define I2C_RETRY_DELAY 5 /* ms */
 #define TFA_RESET_DELAY 5 /* ms */
-
-#ifdef N1A
-#include "inc/tfa98xx_genregs_N1A12.h"
-#else
-#include "inc/tfa98xx_genregs_N1C.h"
-#endif
 
 #include <linux/power_supply.h>
 #define REF_TEMP_DEVICE_NAME "battery"
@@ -81,7 +74,7 @@ static int tfa98xx_cnt_reload;
 
 static LIST_HEAD(profile_list); /* list of user selectable profiles */
 static int tfa98xx_mixer_profiles; /* number of user selectable profiles */
-static int tfa98xx_mixer_profile;  /* current mixer profile */
+static int tfa98xx_mixer_profile; /* current mixer profile */
 static struct snd_kcontrol_new *tfa98xx_controls;
 static struct tfa_container *tfa98xx_container;
 
@@ -2942,30 +2935,30 @@ static int tfa98xx_append_i2c_address(struct device *dev,
 	struct snd_soc_dai_driver *dai_drv,
 	int num_dai)
 {
-	char buf[50];
+	char buf[50], name[50] = {0};
 	int i;
 	int i2cbus = i2c->adapter->nr;
 	int addr = i2c->addr;
 
 	if (dai_drv && num_dai > 0)
 		for (i = 0; i < num_dai; i++) {
-			snprintf(buf, 50, "%s-%d-%x",
-				dai_drv[i].name,
-				i2cbus, addr);
+			memcpy(name, dai_drv[i].name,
+				strlen(dai_drv[i].name));
+			snprintf(buf, 50, "%s-%d-%x", name, i2cbus, addr);
 			dai_drv[i].name = tfa98xx_devm_kstrdup(dev, buf);
 			pr_info("dai_drv[%d].name=%s\n", i, dai_drv[i].name);
 
-			snprintf(buf, 50, "%s-%d-%x",
-				dai_drv[i].playback.stream_name,
-				i2cbus, addr);
+			memcpy(name, dai_drv[i].playback.stream_name,
+				strlen(dai_drv[i].playback.stream_name));
+			snprintf(buf, 50, "%s-%d-%x", name, i2cbus, addr);
 			dai_drv[i].playback.stream_name
 				= tfa98xx_devm_kstrdup(dev, buf);
 			pr_info("dai_drv[%d].playback.stream_name=%s\n",
 				i, dai_drv[i].playback.stream_name);
 
-			snprintf(buf, 50, "%s-%d-%x",
-				dai_drv[i].capture.stream_name,
-				i2cbus, addr);
+			memcpy(name, dai_drv[i].capture.stream_name,
+				strlen(dai_drv[i].capture.stream_name));
+			snprintf(buf, 50, "%s-%d-%x", name, i2cbus, addr);
 			dai_drv[i].capture.stream_name
 				= tfa98xx_devm_kstrdup(dev, buf);
 			pr_info("dai_drv[%d].capture.stream_name=%s\n",
@@ -2985,8 +2978,10 @@ static int tfa98xx_append_i2c_address(struct device *dev,
 				continue;
 			if ((widgets[i].id == snd_soc_dapm_aif_in)
 				|| (widgets[i].id == snd_soc_dapm_aif_out)) {
+				memcpy(name, widgets[i].sname,
+					strlen(widgets[i].sname));
 				snprintf(buf, 50, "%s-%d-%x",
-					widgets[i].sname, i2cbus, addr);
+					name, i2cbus, addr);
 				widgets[i].sname
 					= tfa98xx_devm_kstrdup(dev, buf);
 				pr_info("widgets[%d].sname=%s\n",
@@ -3878,55 +3873,66 @@ static void tfa98xx_set_irq_status(struct tfa98xx *tfa98xx,
 		tfa98xx->istatus, tfa98xx->tfa->dev_idx);
 }
 
+static void tfa98xx_check_status(struct tfa98xx *tfa98xx,
+	int flag, int active_value,
+	char *status_name, const uint16_t bfield)
+{
+	struct tfa_device *tfa = tfa98xx->tfa;
+	int value = 0;
+
+	if (tfa_irq_get(tfa, flag)) {
+		/* clear at read */
+		value = tfa_get_bf(tfa, bfield);
+		pr_err("%s: %s is %s!\n", __func__, status_name,
+			(value == active_value) ? "detected" : "restored");
+		tfa98xx_set_irq_status(tfa98xx, flag,
+			0, (value == 0) ? 1 : 0);
+	}
+}
+
 static void tfa98xx_interrupt(struct work_struct *work)
 {
 	struct tfa98xx *tfa98xx0
 		= container_of(work, struct tfa98xx, interrupt_work.work);
 	struct tfa98xx *tfa98xx;
+	struct tfa_device *tfa;
 	int irq_gpio = tfa98xx0->irq_gpio;
 	int value = 0;
 
-	pr_info("%s: triggered\n", __func__);
+	pr_info("%s: triggered: dev %d\n",
+		__func__, tfa98xx0->tfa->dev_idx);
 
 	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		if (tfa98xx->tfa == NULL) {
+			pr_debug("[0x%x] device is not available\n",
+				tfa98xx->i2c->addr);
+			continue;
+		}
+		tfa = tfa98xx->tfa;
+		value = TFA7x_READ_REG(tfa,
+			VDDS); /* STATUS_FLAGS0 */
+		pr_info("%s: [%d] status flags: 0x%04x\n",
+			__func__, tfa->dev_idx, value);
+
 		if (irq_gpio != tfa98xx->irq_gpio)
 			continue;
 
 		pr_info("%s: status check on dev %d\n", __func__,
-			tfa98xx->tfa->dev_idx);
+			tfa->dev_idx);
 		mutex_lock(&tfa98xx->dsp_lock);
-		if (tfa_irq_get(tfa98xx->tfa, tfa9878_irq_stotds)) {
-			/* clear at read */
-			value = TFA7x_GET_BF(tfa98xx->tfa, OTDS);
-			pr_err("%s: OTP is %s!\n", __func__,
-				(value == 0) ? "detected" : "restored");
-			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stotds,
-				0, (value == 0) ? 1 : 0);
-		}
-		if (tfa_irq_get(tfa98xx->tfa, tfa9878_irq_stocpr)) {
-			/* clear at read */
-			value = TFA7x_GET_BF(tfa98xx->tfa, OCDS);
-			pr_err("%s: OCP is %s!\n", __func__,
-				(value == 1) ? "detected" : "restored");
-			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stocpr,
-				0, (value == 1) ? 1 : 0);
-		}
-		if (tfa_irq_get(tfa98xx->tfa, tfa9878_irq_stuvds)) {
-			/* clear at read */
-			value = TFA7x_GET_BF(tfa98xx->tfa, UVDS);
-			pr_err("%s: UVP is %s!\n", __func__,
-				(value == 0) ? "detected" : "restored");
-			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stuvds,
-				0, (value == 0) ? 1 : 0);
-		}
-		if (tfa_irq_get(tfa98xx->tfa, tfa9878_irq_stmanalarm)) {
-			/* clear at read */
-			value = TFA7x_GET_BF(tfa98xx->tfa, MANALARM);
-			pr_err("%s: Alarm state is %s!\n", __func__,
-				(value == 1) ? "detected" : "restored");
-			tfa98xx_set_irq_status(tfa98xx, tfa9878_irq_stmanalarm,
-				0, (value == 1) ? 1 : 0);
-		}
+		value = TFA7x_READ_REG(tfa,
+			ISTVDDS); /* INTERRUPT_OUT_REG1 */
+		pr_info("%s: [%d] interrupt out: 0x%04x\n",
+			__func__, tfa->dev_idx, value);
+
+		tfa98xx_check_status(tfa98xx, tfa9878_irq_stotds,
+			0, "OTP", TFA7x_FAM(tfa, OTDS));
+		tfa98xx_check_status(tfa98xx, tfa9878_irq_stocpr,
+			1, "OCP", TFA7x_FAM(tfa, OCDS));
+		tfa98xx_check_status(tfa98xx, tfa9878_irq_stuvds,
+			0, "UVP", TFA7x_FAM(tfa, UVDS));
+		tfa98xx_check_status(tfa98xx, tfa9878_irq_stmanalarm,
+			1, "Alarm state", TFA7x_FAM(tfa, MANALARM));
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
 

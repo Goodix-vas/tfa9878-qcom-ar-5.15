@@ -95,7 +95,7 @@ enum tfa98xx_error tfa_cont_write_regs_dev(struct tfa_device *tfa);
  * @param prof_idx the profile index
  * @return Tfa98xx_Error
  */
-enum tfa98xx_error  tfa_cont_write_regs_prof(struct tfa_device *tfa,
+enum tfa98xx_error tfa_cont_write_regs_prof(struct tfa_device *tfa,
 	int prof_idx);
 
 /*
@@ -137,6 +137,14 @@ unsigned int tfa98xx_get_cnt_bitfield(struct tfa_device *tfa,
  * @return device name string or error string if not found
  */
 char *tfa_cont_device_name(struct tfa_container *cnt, int dev_idx);
+
+/*
+ * Get the customer name from the container file customer field
+ * @param tfa the device struct pointer
+ * @param name the input stringbuffer with size: sizeof(customer field)+1
+ * @return actual string length
+ */
+int tfa_cont_get_customer_name(struct tfa_device *tfa, char *name);
 
 /*
  * Get the application name from the container file application field

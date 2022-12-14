@@ -32,7 +32,8 @@ extern "C" {
 /* #define TFA98XX_GIT_VERSIONS "v6.7.4+-Oct.06,2020" */
 /* #define TFA98XX_GIT_VERSIONS "v6.7.4++-Jan.27,2021" */
 /* #define TFA98XX_GIT_VERSIONS "v6.7.14-Jan.14,2022" */
-#define TFA98XX_GIT_VERSIONS "v6.7.14+-May.27,2022"
+/* #define TFA98XX_GIT_VERSIONS "v6.7.14+-May.27,2022" */
+#define TFA98XX_GIT_VERSIONS "v6.7.16+-Dec.16,2022"
 
 #if !defined(TFA98XX_GIT_VERSIONS)
 #include "versions.h"
@@ -48,14 +49,15 @@ extern "C" {
 	/* #define TFA98XX_API_REV_STR "v6.7.4+-Oct.06,2020" */
 	/* #define TFA98XX_API_REV_STR "v6.7.4++-Jan.27,2021" */
 	/* #define TFA98XX_API_REV_STR "v6.7.14-Jan.14,2022" */
-	#define TFA98XX_API_REV_STR "v6.7.14+-May.27,2022"
+	/* #define TFA98XX_API_REV_STR "v6.7.14+-May.27,2022" */
+	#define TFA98XX_API_REV_STR "v6.7.16+-Dec.16,2022"
 #endif
 
 /*
  * data previously defined in Tfa9888_dsp.h
  */
 #define MEMTRACK_MAX_WORDS           150
-#define LSMODEL_MAX_WORDS            150
+#define LSMODEL_MAX_WORDS            250
 #define TFA98XX_MAXTAG              (150)
 #define FW_VAR_API_VERSION          (521)
 
@@ -71,8 +73,8 @@ extern "C" {
 #define tfa9872_Bl_IDX				130
 
 #define FS_SCALE              (double)1
-#define LEAKAGE_FACTOR_SCALE   (double)8388608
-#define RE_CORRECTION_SCALE    (double)8388608
+#define LEAKAGE_FACTOR_SCALE  (double)8388608
+#define RE_CORRECTION_SCALE   (double)8388608
 #define Bl_SCALE              (double)2097152
 #define TCOEF_SCALE           (double)8388608
 
@@ -139,14 +141,14 @@ enum tfa98xx_error {
 	TFA98XX_ERROR_OK = 0,
 	TFA98XX_ERROR_DEVICE,			/* 1. in sync with tfa_error */
 	TFA98XX_ERROR_BAD_PARAMETER,	/* 2. */
-	TFA98XX_ERROR_FAIL,             /* 3. generic failure, avoid mislead */
-	TFA98XX_ERROR_NO_CLOCK,         /* 4. no clock detected */
+	TFA98XX_ERROR_FAIL,				/* 3. generic failure, avoid mislead */
+	TFA98XX_ERROR_NO_CLOCK,			/* 4. no clock detected */
 	TFA98XX_ERROR_STATE_TIMED_OUT,	/* 5. */
 	TFA98XX_ERROR_DSP_NOT_RUNNING,	/* 6. communication with DSP failed */
-	TFA98XX_ERROR_AMPON,            /* 7. amp is still running */
-	TFA98XX_ERROR_NOT_OPEN,	        /* 8. the given handle is not open */
-	TFA98XX_ERROR_IN_USE,	        /* 9. too many handles */
-	TFA98XX_ERROR_BUFFER_TOO_SMALL, /* 10. if a buffer is too small */
+	TFA98XX_ERROR_AMPON,			/* 7. amp is still running */
+	TFA98XX_ERROR_NOT_OPEN,			/* 8. the given handle is not open */
+	TFA98XX_ERROR_IN_USE,			/* 9. too many handles */
+	TFA98XX_ERROR_BUFFER_TOO_SMALL,	/* 10. if a buffer is too small */
 	/* the expected response did not occur within the expected time */
 	TFA98XX_ERROR_BUFFER_RPC_BASE = 100,
 	TFA98XX_ERROR_RPC_BUSY = 101,
@@ -160,7 +162,7 @@ enum tfa98xx_error {
 	TFA98XX_ERROR_RPC_CALIB_FAILED = 109,
 	TFA98XX_ERROR_NOT_IMPLEMENTED,
 	TFA98XX_ERROR_NOT_SUPPORTED,
-	TFA98XX_ERROR_I2C_FATAL,	/* Fatal I2C error occurred */
+	TFA98XX_ERROR_I2C_FATAL,		/* Fatal I2C error occurred */
 	/* Nonfatal I2C error, and retry count reached */
 	TFA98XX_ERROR_I2C_NON_FATAL,
 	TFA98XX_ERROR_OTHER = 1000
@@ -273,7 +275,7 @@ enum tfa98xx_speaker_boost_status_flags {
 	TFA98XX_SPEAKER_BOOST_NEW_MODEL,	/* New model is available */
 	TFA98XX_SPEAKER_BOOST_VOLUME_RDY,	/* 0:stable vol, 1:smoothing */
 	TFA98XX_SPEAKER_BOOST_DAMAGED,		/* Speaker Damage detected  */
-	TFA98XX_SPEAKER_BOOST_SIGNAL_CLIPPING /* input clipping detected */
+	TFA98XX_SPEAKER_BOOST_SIGNAL_CLIPPING	/* input clipping detected */
 };
 
 struct tfa98xx_drc_state_info {
@@ -347,12 +349,12 @@ enum tfa98xx_dmem {
 	TFA98XX_DMEM_IOMEM = 3,
 };
 
-/**
+/*
  * lookup the device type and return the family type
  */
 int tfa98xx_dev2family(int dev_type);
 
-/**
+/*
  *  register definition structure
  */
 struct regdef {
@@ -367,7 +369,7 @@ struct regdef {
 enum tfa98xx_dmem tfa98xx_filter_mem(struct tfa_device *tfa,
 	int filter_index, unsigned short *address, int channel);
 
-/**
+/*
  * Load the default HW settings in the device
  * @param tfa the device struct pointer
  */
@@ -386,7 +388,7 @@ enum tfa98xx_error tfa98xx_powerdown(struct tfa_device *tfa, int powerdown);
 enum tfa98xx_error tfa98xx_select_stereo_gain_channel(struct tfa_device *tfa,
 	enum tfa98xx_stereo_gain_sel gain_sel);
 
-/**
+/*
  * set the mtp with user controllable values
  * @param tfa the device struct pointer
  * @param value to be written
@@ -396,7 +398,7 @@ enum tfa98xx_error tfa98xx_set_mtp(struct tfa_device *tfa,
 	uint16_t value, uint16_t mask);
 enum tfa98xx_error tfa98xx_get_mtp(struct tfa_device *tfa, uint16_t *value);
 
-/**
+/*
  * lock or unlock KEY2
  * lock = 1 will lock
  * lock = 0 will unlock

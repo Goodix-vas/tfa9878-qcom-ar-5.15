@@ -44,7 +44,7 @@ enum feature_support {
 enum tfa98xx_dai_bitmap {
 	TFA98XX_DAI_I2S = 0x01, /**< I2S only */
 	TFA98XX_DAI_TDM = 0x02, /**< TDM, I2S */
-	TFA98XX_DAI_PDM = 0x04, /**< PDM  */
+	TFA98XX_DAI_PDM = 0x04, /**< PDM */
 };
 
 /*

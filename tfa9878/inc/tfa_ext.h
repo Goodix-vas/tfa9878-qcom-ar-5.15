@@ -14,7 +14,7 @@
 /*
  * events
  */
-/** Maximum value for enumerator */
+/* Maximum value for enumerator */
 #define LVM_MAXENUM (0xffff)
 /*
  * This enum type specifies the different events that may trigger a callback.

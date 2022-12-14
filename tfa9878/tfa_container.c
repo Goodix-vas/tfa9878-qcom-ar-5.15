@@ -27,7 +27,8 @@ static int float_to_int(uint32_t x)
 {
 	unsigned int e, m;
 
-	e = (0x7f + 31) - ((*(unsigned int *)&x & 0x7f800000) >> 23);
+	e = (unsigned int)((0x7f + 31)
+		- (int)((*(unsigned int *)&x & 0x7f800000) >> 23));
 	m = 0x80000000 | (*(unsigned int *)&x << 8);
 
 	return -(int)((m >> e) & -(e < 32));
@@ -219,7 +220,7 @@ int tfa_cont_get_max_vstep(struct tfa_device *tfa, int prof_idx)
 	return vstep_count;
 }
 
-/**
+/*
  * Get the file contents associated with the device or profile
  * Search within the device tree, if not found, search within the profile
  * tree. There can only be one type of file within profile or device.
@@ -388,14 +389,12 @@ tfa_cont_get_next_reg_from_end_info
 
 	p += sizeof(msg_info->nr_of_messages);
 	return (struct tfa_volume_step_register_info *)p;
-
 }
 
 static struct tfa_volume_step_register_info *
 tfa_cont_get_reg_for_vstep(struct tfa_volume_step_max2_file *vp, int idx)
 {
 	int i, j, nrMessage;
-
 	struct tfa_volume_step_register_info *reg_info
 		= (struct tfa_volume_step_register_info *)vp->vsteps_bin;
 	struct tfa_volume_step_message_info *msg_info = NULL;
@@ -723,6 +722,10 @@ enum tfa98xx_error tfa_cont_fw_api_check(struct tfa_device *tfa,
 		hdrstr[4], hdrstr[5], hdrstr[6], hdrstr[7]);
 
 	for (i = 0; i < 4; i++) {
+		/* SB5.0 and greater */
+		if (tfa->fw_itf_ver[1] >= TFA_API_SBFW_10_00_00_SMALL_M)
+			if (i == 2) /* skipped the 3rd field, update field */
+				continue;
 		if (tfa->fw_itf_ver[i] != hdrstr[i + 4])
 			/* +4 to skip "APIV" in msg file */
 			return TFA98XX_ERROR_BAD_PARAMETER;
@@ -2484,6 +2487,26 @@ char *tfa_cont_device_name(struct tfa_container *cnt, int dev_idx)
 }
 
 /*
+ * Get the customer name from the container file customer field
+ * note that the input stringbuffer should be sizeof(customer field)+1
+ */
+int tfa_cont_get_customer_name(struct tfa_device *tfa, char *name)
+{
+	unsigned int i;
+	int len = 0;
+
+	for (i = 0; i < sizeof(tfa->cnt->customer); i++) {
+		if (isalnum(tfa->cnt->customer[i])) /* copy char if valid */
+			name[len++] = tfa->cnt->customer[i];
+		if (tfa->cnt->customer[i] == '\0')
+			break;
+	}
+	name[len++] = '\0';
+
+	return len;
+}
+
+/*
  * Get the application name from the container file application field
  * note that the input stringbuffer should be sizeof(application field)+1
  */
@@ -2534,7 +2557,7 @@ int tfa_cont_get_cal_profile(struct tfa_device *tfa)
 	return cal_idx;
 }
 
-/**
+/*
  * Is the profile a tap profile
  */
 int tfa_cont_is_tap_profile(struct tfa_device *tfa, int prof_idx)
@@ -2557,7 +2580,7 @@ int tfa_cont_is_tap_profile(struct tfa_device *tfa, int prof_idx)
 	return 0;
 }
 
-/**
+/*
  * Is the profile a standby profile
  */
 int tfa_cont_is_standby_profile(struct tfa_device *tfa, int prof_idx)
@@ -2580,7 +2603,7 @@ int tfa_cont_is_standby_profile(struct tfa_device *tfa, int prof_idx)
 	return 0;
 }
 
-/**
+/*
  * Is the profile specific to device ?
  * @param dev_idx the index of the device
  * @param prof_idx the index of the profile

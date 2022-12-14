@@ -815,7 +815,7 @@ enum tfa98xx_error tfa98xx_compare_features(struct tfa_device *tfa,
 
 	/* Set proper MTP location per device: */
 	if (tfa->tfa_family == 1)
-		mtpbf = 0x850f; /* MTP5 for tfa1,16 bits */
+		mtpbf = 0x850f; /* MTP5 for tfa1, 16 bits */
 	else
 		mtpbf = 0xf907; /* MTP9 for tfa2, 8 bits */
 
@@ -1038,16 +1038,18 @@ enum tfa98xx_error tfa98xx_get_mtp(struct tfa_device *tfa, uint16_t *value)
 	int status;
 	int result;
 
-	/* not possible if PLL in powerdown */
-	if (TFA_GET_BF(tfa, PWDN)) {
-		pr_debug("PLL in powerdown\n");
-		return TFA98XX_ERROR_NO_CLOCK;
-	}
+	if(tfa->tfa_family == 1) {
+		/* not possible if PLL in powerdown */
+		if (TFA_GET_BF(tfa, PWDN)) {
+			pr_debug("PLL in powerdown\n");
+			return TFA98XX_ERROR_NO_CLOCK;
+		}
 
-	tfa98xx_dsp_system_stable(tfa, &status);
-	if (status == 0) {
-		pr_debug("PLL not running\n");
-		return TFA98XX_ERROR_NO_CLOCK;
+		tfa98xx_dsp_system_stable(tfa, &status);
+		if (status == 0) {
+			pr_debug("PLL not running\n");
+			return TFA98XX_ERROR_NO_CLOCK;
+		}
 	}
 
 	result = TFA_READ_REG(tfa, MTP0);
@@ -2009,7 +2011,7 @@ tfa98xx_dsp_get_hw_feature_bits(struct tfa_device *tfa, int *features)
 					? TFA98XX_ERROR_FAIL : TFA98XX_ERROR_OK;
 			}
 
-			mtpbf = 0x850f; /* MTP5 for tfa1,16 bits */
+			mtpbf = 0x850f; /* MTP5 for tfa1, 16 bits */
 		} else {
 			mtpbf = 0xf907; /* MTP9 for tfa2, 8 bits */
 		}
@@ -5214,7 +5216,7 @@ int tfa_dev_probe(int resp_addr, struct tfa_device *tfa)
 	tfa->resp_address = (unsigned char)resp_addr;
 
 	/* read revid via low level hal, register 3 */
-	if (tfa98xx_read_register16(tfa, 0x03, &rev)
+	if (tfa98xx_read_register16(tfa, TFA98XX_DEVICE_REVISION, &rev)
 		!= TFA98XX_ERROR_OK) {
 		pr_debug("Error: Unable to read revid from responder:0x%02x\n",
 			resp_addr);

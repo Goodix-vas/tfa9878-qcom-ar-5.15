@@ -32,6 +32,12 @@ struct tfa_irq_name {
 #include "tfa9894_tfafieldnames.h"
 #include "tfa9894_tfafieldnames_N2.h"
 
+#ifdef N1A
+#include "tfa98xx_genregs_N1A12.h"
+#else
+#include "tfa98xx_genregs_N1C.h"
+#endif
+
 /* missing 'common' defs break the build but unused in TFA1 context */
 #define TFA1_BF_AMPINSEL -1
 #define TFA1_BF_MANSCONF -1

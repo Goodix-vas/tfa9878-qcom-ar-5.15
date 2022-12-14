@@ -296,7 +296,6 @@ void tfanone_ops(struct tfa_device_ops *ops)
 	ops->get_swprof = tfanone_get_swprofile;
 	ops->set_swvstep = tfanone_set_swvstep;
 	ops->get_swvstep = tfanone_get_swvstep;
-
 }
 
 /***********/

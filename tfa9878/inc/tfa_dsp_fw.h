@@ -17,7 +17,7 @@
 /*
  * tfadsp_fw_api.c
  */
-/**
+/*
  * Return a text version of the firmware status ID code
  * @param status the given status ID code
  * @return the firmware status ID string
@@ -34,7 +34,7 @@ int tfadsp_fw_get_re25(struct tfa_device *tfa, uint8_t *buffer);
 /*
  * the order matches the ACK bits order in TFA98XX_CF_STATUS
  */
-enum tfa_fw_event {/* not all available on each device */
+enum tfa_fw_event { /* not all available on each device */
 	TFA_FW_I2C_CMD_ACK,
 	TFA_FW_RESET_START,
 	TFA_FW_SHORT_ON_MIPS,
@@ -50,6 +50,7 @@ enum tfa_fw_event {/* not all available on each device */
 #define TFA_API_SBFW_PO_BIG_M	10
 #define TFA_API_SBFW_8_09_00_SMALL_M	31
 #define TFA_API_SBFW_9_00_00_SMALL_M	33
+#define TFA_API_SBFW_10_00_00_SMALL_M	34
 
 /* the following type mappings are compiler specific */
 #define subaddress_t unsigned char

@@ -464,7 +464,7 @@ struct tfa_volume_step_message_info {
 	uint8_t parameter_data[];
 };
 
-/**************************old v2 *****************************************/
+/************************** old v2 **************************/
 
 /*
  * subv 00 volumestep file
@@ -497,7 +497,7 @@ struct tfa_old_volume_step2_file {
 	struct tfa_old_volume_step2 step[];
 };
 
-/******************** end old v2 ************************************/
+/************************** end old v2 **************************/
 
 /*
  * speaker file header
