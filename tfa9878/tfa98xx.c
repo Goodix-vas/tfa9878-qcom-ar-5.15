@@ -4713,7 +4713,10 @@ static ssize_t tfa98xx_reinit_store(struct device *dev,
 	struct tfa_device *tfa = NULL;
 	int reinit = 0;
 
-	if (tfa98xx->tfa->tfa_family == 0) {
+	tfa = tfa98xx->tfa;
+	if (!tfa)
+		return -ENODEV;
+	if (tfa->tfa_family == 0) {
 		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
 			tfa98xx->i2c->addr, __func__);
 		return -EIO;
@@ -5227,6 +5230,10 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	ret = device_create_file(&i2c->dev, &dev_attr_autocal);
 	if (ret)
 		dev_info(&i2c->dev, "error creating sysfs node, autocal\n");
+
+	ret = device_create_file(&i2c->dev, &dev_attr_reinit);
+	if (ret)
+		dev_info(&i2c->dev, "error creating sysfs node, reinit\n");
 
 	pr_info("%s Probe completed successfully!\n", __func__);
 
