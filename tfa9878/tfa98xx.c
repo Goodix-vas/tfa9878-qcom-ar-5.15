@@ -4185,7 +4185,6 @@ static int _tfa98xx_mute(struct tfa98xx *tfa98xx, int mute, int stream)
 		if (tfa98xx->tfa->set_active == 0) {
 			pr_info("%s: skip unmuting device %d, if it's forced to set inactive\n",
 				__func__, tfa98xx->tfa->dev_idx);
-			tfa98xx->tfa->unset_log = 1;
 			return 0;
 		}
 

@@ -1038,7 +1038,7 @@ enum tfa98xx_error tfa98xx_get_mtp(struct tfa_device *tfa, uint16_t *value)
 	int status;
 	int result;
 
-	if(tfa->tfa_family == 1) {
+	if (tfa->tfa_family == 1) {
 		/* not possible if PLL in powerdown */
 		if (TFA_GET_BF(tfa, PWDN)) {
 			pr_debug("PLL in powerdown\n");
