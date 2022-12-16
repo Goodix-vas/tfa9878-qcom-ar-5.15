@@ -3725,6 +3725,7 @@ static void tfa98xx_dsp_init(struct tfa98xx *tfa98xx)
 	bool reschedule = false;
 	bool sync = false;
 	bool do_sync;
+	int active_device_count = tfa98xx_device_count;
 
 	if (tfa98xx->dsp_fw_state != TFA98XX_DSP_FW_OK) {
 		pr_debug("Skipping tfa_dev_start (no FW: %d)\n",
@@ -3794,10 +3795,11 @@ static void tfa98xx_dsp_init(struct tfa98xx *tfa98xx)
 
 	/* check if all devices have started */
 	mutex_lock(&tfa98xx_mutex);
-	if (tfa98xx_sync_count < tfa98xx_device_count)
+	active_device_count = tfa98xx->tfa->active_count;
+	if (tfa98xx_sync_count < active_device_count)
 		tfa98xx_sync_count++;
 
-	do_sync = (tfa98xx_sync_count >= tfa98xx_device_count);
+	do_sync = (tfa98xx_sync_count >= active_device_count);
 
 	/* when all devices have started then unmute */
 	if (do_sync) {
