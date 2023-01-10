@@ -4889,6 +4889,111 @@ enum tfa98xx_error tfa_run_cal(int index, uint16_t *value)
 }
 EXPORT_SYMBOL(tfa_run_cal);
 
+void tfa_restore_after_cal(int index, int cal_err)
+{
+	enum tfa98xx_error err = TFA98XX_ERROR_OK;
+	struct tfa_device *tfa = tfa98xx_get_tfa_device_from_index(index);
+	struct tfa_device *ntfa;
+	int i;
+	int need_restore = 0;
+	int active_profile = -1;
+
+	pr_info("%s: enter with dev_idx %d (cal_err %d)\n",
+		__func__, tfa->dev_idx, cal_err);
+
+	/* mute and check if it needs restoring */
+	for (i = 0; i < tfa->dev_count; i++) {
+		ntfa = tfa98xx_get_tfa_device_from_index(i);
+
+		if (ntfa == NULL)
+			continue;
+		if (!tfa_is_active_device(ntfa))
+			continue;
+
+		/* force MUTE after calibration, to set UNMUTE at sync later */
+		pr_debug("%s: [%d] force MUTE after calibration\n",
+			__func__, ntfa->dev_idx);
+		tfa_dev_set_state(ntfa, TFA_STATE_MUTE, 1);
+
+		active_profile = tfa_dev_get_swprof(ntfa);
+		if (ntfa->next_profile == active_profile
+			|| ntfa->next_profile < 0)
+			continue;
+
+		need_restore = 1;
+	}
+
+	/* restore by switching profile */
+	if (need_restore) {
+		/* reset counter */
+		tfa_set_status_flag(tfa, TFA_SET_DEVICE, -1);
+		tfa_set_status_flag(tfa, TFA_SET_CONFIG, -1);
+
+		/*
+		 * restore profile after calibration.
+		 * typically, when calibration is done,
+		 * profile should be updated in warm state.
+		 */
+		for (i = 0; i < tfa->dev_count; i++) {
+			ntfa = tfa98xx_get_tfa_device_from_index(i);
+
+			if (ntfa == NULL)
+				continue;
+			if (!tfa_is_active_device(ntfa))
+				continue;
+
+			tfa_set_status_flag(ntfa, TFA_SET_DEVICE, 1);
+
+			active_profile = tfa_dev_get_swprof(ntfa);
+			pr_info("%s: [%d] restore profile after calibration (active %d; next %d)\n",
+				__func__, ntfa->dev_idx,
+				active_profile, ntfa->next_profile);
+
+			/* switch profile */
+			pr_info("%s: apply the whole profile setting\n",
+				__func__);
+
+			err = tfa_dev_switch_profile(ntfa,
+				ntfa->next_profile, ntfa->vstep);
+			if (err != TFA98XX_ERROR_OK)
+				pr_err("%s: error in switch profile (%d)\n",
+					__func__, err);
+		}
+
+		/* reset counter */
+		tfa_set_status_flag(tfa, TFA_SET_DEVICE, -1);
+		tfa_set_status_flag(tfa, TFA_SET_CONFIG, -1);
+	}
+
+	/* set gain and unmute */
+	for (i = 0; i < tfa->dev_count; i++) {
+		ntfa = tfa98xx_get_tfa_device_from_index(i);
+
+		if (ntfa == NULL)
+			continue;
+		if (!tfa_is_active_device(ntfa))
+			continue;
+
+		if (cal_err != TFA98XX_ERROR_OK
+			|| ntfa->spkr_damaged) {
+			tfa_handle_damaged_speakers(ntfa);
+			continue;
+		}
+
+		if (ntfa->spkgain != -1) {
+			pr_info("%s: set speaker gain 0x%x\n",
+				__func__, ntfa->spkgain);
+			TFA7x_SET_BF(ntfa, TDMSPKG,
+				ntfa->spkgain);
+		}
+		/* force UNMUTE after processing calibration */
+		pr_debug("%s: [%d] force UNMUTE after processing calibration\n",
+			__func__, ntfa->dev_idx);
+		tfa_dev_set_state(ntfa, TFA_STATE_UNMUTE, 1);
+	}
+}
+EXPORT_SYMBOL(tfa_restore_after_cal);
+
 int tfa98xx_set_blackbox(int enable)
 {
 	enum tfa98xx_error ret = TFA98XX_ERROR_OK;

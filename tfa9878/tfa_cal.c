@@ -114,16 +114,19 @@ static ssize_t config_store(struct device *dev,
 	int ret = 0, status;
 
 	/* Compare string, excluding the trailing \0 and the potentials eol */
-	if (!sysfs_streq(buf, "1") && !sysfs_streq(buf, "0")) {
-		pr_info("%s: tfa_cal invalid value to start calibration\n",
+	if (!sysfs_streq(buf, "1") && !sysfs_streq(buf, "0")
+		 && !sysfs_streq(buf, "-1")) {
+		pr_info("%s: tfa_cal invalid value to configure calibration\n",
 			__func__);
 		return -EINVAL;
 	}
 
 	ret = kstrtou32(buf, 10, &status);
-	if (!status) {
-		pr_info("%s: do nothing, reset status\n", __func__);
+	if (status != 1) {
+		pr_info("%s: tfa_cal to restore setting after calibration\n",
+			__func__);
 		cur_status = 0; /* done - changed to inactive */
+		tfa_restore_after_cal(0, status);
 		return -EINVAL;
 	}
 	if (cur_status)

@@ -75,6 +75,7 @@ int tfa_is_active_device(struct tfa_device *tfa);
 void tfa_handle_damaged_speakers(struct tfa_device *tfa);
 
 enum tfa98xx_error tfa_run_cal(int index, uint16_t *value);
+void tfa_restore_after_cal(int index, int cal_err);
 
 int tfa_get_power_state(int index);
 
