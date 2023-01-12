@@ -33,8 +33,8 @@
 #define TFA98XX_FLAG_TAPDET_AVAILABLE	(1 << 4)
 #define TFA98XX_FLAG_CALIBRATION_CTL	(1 << 5)
 #define TFA98XX_FLAG_REMOVE_PLOP_NOISE	(1 << 6)
-#define TFA98XX_FLAG_LP_MODES	        (1 << 7)
-#define TFA98XX_FLAG_TDM_DEVICE         (1 << 8)
+#define TFA98XX_FLAG_LP_MODES			(1 << 7)
+#define TFA98XX_FLAG_TDM_DEVICE			(1 << 8)
 
 #define TFA98XX_NUM_RATES		14
 

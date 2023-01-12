@@ -4116,17 +4116,7 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 
 	if (tfa->mtpex == -1)
 		tfa->mtpex = tfa_dev_mtp_get(tfa, TFA_MTP_EX);
-	if (tfa->mtpex == 0 || tfa->reset_mtpex) {
-		pr_info("%s: dev %d, MTPEX=%d%s\n",
-			__func__, tfa->dev_idx, tfa->mtpex,
-			(tfa->reset_mtpex) ? " (forced)" : "");
-		if (!tfa->is_probus_device) {
-			pr_info("%s: set cold by force in non-probus case\n",
-				__func__);
-			forced = 1;
-			tfa->reset_mtpex = 1;
-		}
-		cal_ready &= (tfa->disable_auto_cal) ? 0 : 1;
+	if (!tfa->disable_auto_cal) {
 		if (cal_ready) {
 			cal_profile = tfa_cont_get_cal_profile(tfa);
 			if (next_profile == cal_profile) {
