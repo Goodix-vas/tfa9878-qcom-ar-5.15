@@ -4116,28 +4116,27 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 
 	if (tfa->mtpex == -1)
 		tfa->mtpex = tfa_dev_mtp_get(tfa, TFA_MTP_EX);
-	if (!tfa->disable_auto_cal) {
-		if (cal_ready) {
-			cal_profile = tfa_cont_get_cal_profile(tfa);
-			if (next_profile == cal_profile) {
-				tfa->next_profile
-					= (active_profile >= 0) ? active_profile : 0;
-				pr_info("%s: set next profile %d for dev %d, if cal profile is selected\n",
-					__func__, tfa->next_profile, tfa->dev_idx);
-			}
-			if (cal_profile >= 0) {
-				pr_info("%s: set profile for calibration profile %d\n",
-					__func__, cal_profile);
-				next_profile = cal_profile;
-			}
-			tfa->first_after_boot = 1;
-		} else {
-			pr_info("%s: keep using profile (%d) and use dummy value if unavailable\n",
-				__func__, next_profile);
-			/* skip resetting MTPEX unless all are active */
-			if (tfa->is_probus_device)
-				tfa->reset_mtpex = 0;
+	cal_ready &= (tfa->disable_auto_cal) ? 0 : 1;
+	if (cal_ready) {
+		if (!tfa->is_probus_device) {
+			pr_info("%s: set cold by force in non-probus case\n",
+				__func__);
+			forced = 1;
 		}
+
+		cal_profile = tfa_cont_get_cal_profile(tfa);
+		if (next_profile == cal_profile) {
+			tfa->next_profile
+				= (active_profile >= 0) ? active_profile : 0;
+			pr_info("%s: set next profile %d for dev %d, if cal profile is selected\n",
+				__func__, tfa->next_profile, tfa->dev_idx);
+		}
+		if (cal_profile >= 0) {
+			pr_info("%s: set profile for calibration profile %d\n",
+				__func__, cal_profile);
+			next_profile = cal_profile;
+		}
+		tfa->first_after_boot = 1;
 	}
 
 	/* TfaRun_SpeakerBoost implies un-mute */
