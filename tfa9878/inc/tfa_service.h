@@ -33,7 +33,8 @@ extern "C" {
 /* #define TFA98XX_GIT_VERSIONS "v6.7.4++-Jan.27,2021" */
 /* #define TFA98XX_GIT_VERSIONS "v6.7.14-Jan.14,2022" */
 /* #define TFA98XX_GIT_VERSIONS "v6.7.14+-May.27,2022" */
-#define TFA98XX_GIT_VERSIONS "v6.7.16+-Dec.16,2022"
+/* #define TFA98XX_GIT_VERSIONS "v6.7.16+-Dec.16,2022" */
+#define TFA98XX_GIT_VERSIONS "v6.8.0+-Feb.23,2023"
 
 #if !defined(TFA98XX_GIT_VERSIONS)
 #include "versions.h"
@@ -50,7 +51,8 @@ extern "C" {
 	/* #define TFA98XX_API_REV_STR "v6.7.4++-Jan.27,2021" */
 	/* #define TFA98XX_API_REV_STR "v6.7.14-Jan.14,2022" */
 	/* #define TFA98XX_API_REV_STR "v6.7.14+-May.27,2022" */
-	#define TFA98XX_API_REV_STR "v6.7.16+-Dec.16,2022"
+	/* #define TFA98XX_API_REV_STR "v6.7.16+-Dec.16,2022" */
+	#define TFA98XX_API_REV_STR "v6.8.0+-Feb.23,2023"
 #endif
 
 /*
@@ -875,8 +877,10 @@ int tfa_read_reg(struct tfa_device *tfa,
 #define TFA_READ_REG(tfa, fieldname) \
 	tfa_read_reg(tfa, TFA_FAM(tfa, fieldname))
 
-/* instance for TFA9874 / TFA9878 / TFA9872 / TFA9894 */
+/* instance for TFA9878 */
 #define TFA7x_FAM(tfa, fieldname) (TFA9878_BF_##fieldname)
+/* for undefined bitfields */
+/* #define TFA7x_FAM(tfa, fieldname) TFA_FAM(tfa, fieldname) */
 
 /* set/get bit fields to HW register*/
 #define TFA7x_SET_BF(tfa, fieldname, value) \

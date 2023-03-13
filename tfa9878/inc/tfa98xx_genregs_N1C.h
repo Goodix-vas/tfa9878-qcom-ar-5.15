@@ -17,6 +17,7 @@
 #define TFA98XX_DEVICE_REVISION           0x03
 #define TFA98XX_CLOCK_CONTROL             0x04
 #define TFA98XX_CLOCK_GATING_CONTROL      0x05
+#define TFA98XX_DEVICE_REVISION1          0x06
 #define TFA98XX_SIDE_TONE_CONFIG          0x0d
 #define TFA98XX_CTRL_DIGTOANA_REG         0x0e
 #define TFA98XX_STATUS_FLAGS0             0x10

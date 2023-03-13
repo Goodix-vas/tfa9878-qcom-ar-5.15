@@ -1473,6 +1473,10 @@ static enum tfa98xx_error _dsp_msg(struct tfa_device *tfa, int lastmessage)
 		pr_debug("%s: send multi-message, length=%d (update at %s)\n",
 			__func__, len,
 			lastmessage ? "the last message" : "buffer full");
+	if (len < 0) {
+		error = len;
+		goto _dsp_msg_exit;
+	}
 
 	/* send messages to the target selected */
 	if (tfa98xx_count_active_stream(BIT_PSTREAM) > 0) {
@@ -1489,6 +1493,8 @@ static enum tfa98xx_error _dsp_msg(struct tfa_device *tfa, int lastmessage)
 		pr_info("%s: skip if PSTREAM is lost\n",
 			__func__);
 	}
+
+_dsp_msg_exit:
 	if (error != TFA98XX_ERROR_OK)
 		pr_err("%s: error in sending messages (%d)\n",
 			__func__, error);
@@ -1523,6 +1529,8 @@ enum tfa98xx_error dsp_msg(struct tfa_device *tfa,
 
 		length = 4 * length24 / 3;
 		intbuf = kmem_cache_alloc(tfa->cachep, GFP_KERNEL);
+		if (intbuf == NULL)
+			return TFA98XX_ERROR_FAIL;
 		buf = (char *)intbuf;
 
 		/* convert 24 bit DSP messages to a 32 bit integer */
@@ -1622,6 +1630,8 @@ enum tfa98xx_error dsp_msg_read(struct tfa_device *tfa,
 	if (tfa->convert_dsp32) {
 		length = 4 * length24 / 3;
 		bytes = kmem_cache_alloc(tfa->cachep, GFP_KERNEL);
+		if (bytes == NULL)
+			return TFA98XX_ERROR_FAIL;
 	}
 
 	if (tfa->has_msg == 0) { /* via i2c */
@@ -1816,10 +1826,18 @@ enum tfa98xx_error tfa_dsp_cmd_id_write(struct tfa_device *tfa,
 	enum tfa98xx_error error;
 	unsigned char *buffer;
 	int nr = 0;
+	int buf_p_index = -1;
 
 	mutex_lock(&dsp_msg_lock);
 
-	buffer = kmem_cache_alloc(tfa->cachep, GFP_KERNEL);
+	buf_p_index = tfa98xx_buffer_pool_access
+		(-1, num_bytes + 3, &buffer, POOL_GET);
+	if (buf_p_index != -1)
+		pr_debug("%s: allocated from buffer_pool[%d] for 0x%02x%02x (%d)\n",
+			__func__, buf_p_index,
+			module_id + 0x80, param_id, num_bytes + 3);
+	else
+		buffer = kmalloc(num_bytes + 3, GFP_KERNEL);
 	if (buffer == NULL) {
 		mutex_unlock(&dsp_msg_lock);
 		return TFA98XX_ERROR_FAIL;
@@ -1836,7 +1854,11 @@ enum tfa98xx_error tfa_dsp_cmd_id_write(struct tfa_device *tfa,
 
 	error = dsp_msg(tfa, nr, (char *)buffer);
 
-	kmem_cache_free(tfa->cachep, buffer);
+	if (buf_p_index != -1)
+		buf_p_index = tfa98xx_buffer_pool_access
+			(buf_p_index, 0, &buffer, POOL_RETURN);
+	else
+		kfree(buffer);
 
 	mutex_unlock(&dsp_msg_lock);
 
@@ -2850,9 +2872,11 @@ enum tfa98xx_error tfa_set_calibration_values(struct tfa_device *tfa)
 			tfa_set_status_flag(tfa, TFA_SET_CONFIG, -1);
 
 			if (tfa->ext_dsp == 1) {
+				mutex_lock(&dsp_msg_lock);
 				pr_info("%s: flush buffer in blob, in bypass\n",
 					__func__);
 				err = tfa_tib_dsp_msgmulti(tfa, -2, NULL);
+				mutex_unlock(&dsp_msg_lock);
 			}
 
 			goto set_calibration_values_exit;
@@ -3100,9 +3124,11 @@ enum tfa98xx_error tfa_run_speaker_boost(struct tfa_device *tfa,
 	/* at initial device only: to flush buffer */
 	if (tfa_count_status_flag(tfa, TFA_SET_DEVICE) == 1) {
 		/* flush message buffer */
+		mutex_lock(&dsp_msg_lock);
 		pr_debug("%s: flush buffer in blob, in cold start\n",
 			__func__);
 		err = tfa_tib_dsp_msgmulti(tfa, -2, NULL);
+		mutex_unlock(&dsp_msg_lock);
 	}
 
 	/* cold start */
@@ -4196,6 +4222,15 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 				__func__);
 			mutex_unlock(&dev_lock);
 			goto tfa_dev_start_exit;
+		} else if (tfa_cont_is_standby_profile(tfa, active_profile)
+			&& (next_profile != active_profile
+			&& active_profile >= 0)) {
+			pr_info("%s: skip powering on device, at exiting from standby profile!\n",
+				__func__);
+			/* Go to the Powerdown & Mute state */
+			tfa_dev_set_state(tfa,
+				TFA_STATE_POWERDOWN | TFA_STATE_MUTE, 0);
+			goto after_setting_operating_mode;
 		}
 
 		/* Make sure internal oscillator is running
@@ -4231,6 +4266,7 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 		}
 	}
 
+after_setting_operating_mode:
 	mutex_unlock(&dev_lock);
 
 	if (cal_profile >= 0) {
@@ -4357,9 +4393,11 @@ enum tfa_error tfa_dev_stop(struct tfa_device *tfa)
 			== tfa->active_count
 			|| tfa_count_status_flag(tfa, TFA_SET_CONFIG) > 0) {
 			/* flush message buffer */
+			mutex_lock(&dsp_msg_lock);
 			pr_debug("%s: flush buffer in blob, at stop\n",
 				__func__);
 			err = tfa_tib_dsp_msgmulti(tfa, -2, NULL);
+			mutex_unlock(&dsp_msg_lock);
 		}
 		tfa->is_bypass = 0; /* reset at stop */
 	}
@@ -5541,7 +5579,6 @@ int tfa_get_noclk(struct tfa_device *tfa)
 	return TFA7x_GET_BF(tfa, NOCLK);
 }
 
-/* instance for TFA9874 / TFA9878 / TFA9894 */
 enum tfa98xx_error tfa7x_status(struct tfa_device *tfa)
 {
 	int value;

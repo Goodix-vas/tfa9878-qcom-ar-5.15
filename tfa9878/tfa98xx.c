@@ -1294,12 +1294,12 @@ static void tfa98xx_debug_init(struct tfa98xx *tfa98xx, struct i2c_client *i2c)
 		i2c, &tfa98xx_dbgfs_calib_otc_fops);
 	debugfs_create_file("MTPEX", 0664, tfa98xx->dbg_dir,
 		i2c, &tfa98xx_dbgfs_calib_mtpex_fops);
+	debugfs_create_file("R", 0444, tfa98xx->dbg_dir,
+		i2c, &tfa98xx_dbgfs_r_fops);
 	debugfs_create_file("TEMP", 0664, tfa98xx->dbg_dir,
 		i2c, &tfa98xx_dbgfs_calib_temp_fops);
 	debugfs_create_file("calibrate", 0664, tfa98xx->dbg_dir,
 		i2c, &tfa98xx_dbgfs_calib_start_fops);
-	debugfs_create_file("R", 0444, tfa98xx->dbg_dir,
-		i2c, &tfa98xx_dbgfs_r_fops);
 	debugfs_create_file("version", 0444, tfa98xx->dbg_dir,
 		i2c, &tfa98xx_dbgfs_version_fops);
 	debugfs_create_file("dsp-state", 0664, tfa98xx->dbg_dir,
@@ -2053,6 +2053,14 @@ static int tfa98xx_set_device_ctl(struct snd_kcontrol *kcontrol,
 		pr_info("%s: [%d] set active %d\n",
 			__func__, dev, request);
 		tfa->set_active = request; /* store for the next sessions */
+	}
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		tfa = tfa98xx->tfa;
+		if (tfa == NULL)
+			continue;
+
+		dev = tfa->dev_idx;
 
 		/* exit if stream is not ready for immediate action */
 		if (tfa98xx->pstream == 0
@@ -2062,7 +2070,7 @@ static int tfa98xx_set_device_ctl(struct snd_kcontrol *kcontrol,
 			continue;
 		}
 
-		switch (request) {
+		switch (tfa->set_active) {
 		case 0: /* deactivate immediately */
 			if (tfa->pause_state == 1) {
 				pr_info("%s: [%d] already paused; no need to deactivate\n",
@@ -2116,6 +2124,11 @@ static int tfa98xx_set_device_ctl(struct snd_kcontrol *kcontrol,
 			break;
 		}
 	}
+
+	/* reset counter */
+	tfa = tfa98xx_get_tfa_device_from_index(0);
+	tfa_set_status_flag(tfa, TFA_SET_DEVICE, -1);
+
 	mutex_unlock(&tfa98xx_mutex);
 
 	return 1;
@@ -2213,6 +2226,7 @@ static int tfa98xx_set_mute_ctl(struct snd_kcontrol *kcontrol,
 	struct tfa_device *tfa = NULL;
 	int dev;
 	int request;
+	int cur_mute_state[MAX_HANDLES] = {0};
 
 	mutex_lock(&tfa98xx_mutex);
 	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
@@ -2223,6 +2237,19 @@ static int tfa98xx_set_mute_ctl(struct snd_kcontrol *kcontrol,
 		dev = tfa->dev_idx;
 		request = ucontrol->value.integer.value[dev];
 
+		pr_info("%s: [%d] set mute %d\n",
+			__func__, dev, request);
+		cur_mute_state[dev] = tfa->mute_state;
+		tfa->mute_state = request;
+	}
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		tfa = tfa98xx->tfa;
+		if (tfa == NULL)
+			continue;
+
+		dev = tfa->dev_idx;
+
 		/* exit if stream is not ready for initialization */
 		if (tfa98xx->pstream == 0
 			&& tfa98xx->samstream == 0) {
@@ -2231,9 +2258,9 @@ static int tfa98xx_set_mute_ctl(struct snd_kcontrol *kcontrol,
 			continue;
 		}
 
-		switch (request) {
+		switch (tfa->mute_state) {
 		case 0: /* unmute */
-			if (tfa->mute_state == 0) {
+			if (cur_mute_state[dev] == 0) {
 				pr_info("%s: [%d] already unmuted, skip the request\n",
 					__func__, dev);
 				break;
@@ -2242,12 +2269,11 @@ static int tfa98xx_set_mute_ctl(struct snd_kcontrol *kcontrol,
 			pr_info("%s: [%d] unmute channel\n",
 				__func__, dev);
 			mutex_lock(&tfa98xx->dsp_lock);
-			tfa->mute_state = 0;
 			tfa_run_unmute(tfa);
 			mutex_unlock(&tfa98xx->dsp_lock);
 			break;
 		case 1: /* mute */
-			if (tfa->mute_state == 1) {
+			if (cur_mute_state[dev] == 1) {
 				pr_info("%s: [%d] already muted, skip the request\n",
 					__func__, dev);
 				break;
@@ -2256,7 +2282,6 @@ static int tfa98xx_set_mute_ctl(struct snd_kcontrol *kcontrol,
 			pr_info("%s: [%d] mute channel\n",
 				__func__, dev);
 			mutex_lock(&tfa98xx->dsp_lock);
-			tfa->mute_state = 1;
 			tfa_run_mute(tfa);
 			mutex_unlock(&tfa98xx->dsp_lock);
 			break;
@@ -2311,6 +2336,7 @@ static int tfa98xx_set_pause_ctl(struct snd_kcontrol *kcontrol,
 	enum tfa_error err;
 	int dev;
 	int request;
+	int cur_pause_state[MAX_HANDLES] = {0};
 
 	mutex_lock(&tfa98xx_mutex);
 	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
@@ -2321,9 +2347,22 @@ static int tfa98xx_set_pause_ctl(struct snd_kcontrol *kcontrol,
 		dev = tfa->dev_idx;
 		request = ucontrol->value.integer.value[dev];
 
-		switch (request) {
+		pr_info("%s: [%d] set pause %d\n",
+			__func__, dev, request);
+		cur_pause_state[dev] = tfa->pause_state;
+		tfa->pause_state = request;
+	}
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		tfa = tfa98xx->tfa;
+		if (tfa == NULL)
+			continue;
+
+		dev = tfa->dev_idx;
+
+		switch (tfa->pause_state) {
 		case 0: /* resume */
-			if (tfa->pause_state == 0) {
+			if (cur_pause_state[dev] == 0) {
 				pr_info("%s: [%d] already resumed, skip the request\n",
 					__func__, dev);
 				break;
@@ -2363,11 +2402,9 @@ static int tfa98xx_set_pause_ctl(struct snd_kcontrol *kcontrol,
 				__func__, dev);
 			tfa_dev_set_state(tfa, TFA_STATE_UNMUTE, 0);
 			mutex_unlock(&tfa98xx->dsp_lock);
-
-			tfa->pause_state = 0;
 			break;
 		case 1: /* pause */
-			if (tfa->pause_state == 1) {
+			if (cur_pause_state[dev] == 1) {
 				pr_info("%s: [%d] already paused, skip the request\n",
 					__func__, dev);
 				break;
@@ -2377,8 +2414,6 @@ static int tfa98xx_set_pause_ctl(struct snd_kcontrol *kcontrol,
 				__func__, dev);
 			cancel_delayed_work_sync(&tfa98xx->monitor_work);
 			_tfa98xx_stop(tfa98xx);
-
-			tfa->pause_state = 1;
 			break;
 		default:
 			pr_info("%s: [%d] wrong request\n",
@@ -2386,6 +2421,11 @@ static int tfa98xx_set_pause_ctl(struct snd_kcontrol *kcontrol,
 			break;
 		}
 	}
+
+	/* reset counter */
+	tfa = tfa98xx_get_tfa_device_from_index(0);
+	tfa_set_status_flag(tfa, TFA_SET_DEVICE, -1);
+
 	mutex_unlock(&tfa98xx_mutex);
 
 	return 1;
@@ -3357,10 +3397,14 @@ static void tfa98xx_interrupt_enable_tfa2(struct tfa98xx *tfa98xx, bool enable)
 	/* clear all the events before enabling */
 	tfa_irq_clear(tfa98xx->tfa, tfa98xx->tfa->irq_all);
 
-	tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stotds, enable);
-	tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stocpr, enable);
-	tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stuvds, enable);
-	tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stmanalarm, enable);
+	switch (tfa98xx->tfa->rev & 0xff) {
+	case 0x78:
+		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stotds, enable);
+		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stocpr, enable);
+		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stuvds, enable);
+		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stmanalarm, enable);
+		break;
+	}
 }
 
 /* global enable / disable interrupts */
@@ -3921,21 +3965,26 @@ static void tfa98xx_interrupt(struct work_struct *work)
 
 		pr_info("%s: status check on dev %d\n", __func__,
 			tfa->dev_idx);
-		mutex_lock(&tfa98xx->dsp_lock);
-		value = TFA7x_READ_REG(tfa,
-			ISTVDDS); /* INTERRUPT_OUT_REG1 */
-		pr_info("%s: [%d] interrupt out: 0x%04x\n",
-			__func__, tfa->dev_idx, value);
 
-		tfa98xx_check_status(tfa98xx, tfa9878_irq_stotds,
-			0, "OTP", TFA7x_FAM(tfa, OTDS));
-		tfa98xx_check_status(tfa98xx, tfa9878_irq_stocpr,
-			1, "OCP", TFA7x_FAM(tfa, OCDS));
-		tfa98xx_check_status(tfa98xx, tfa9878_irq_stuvds,
-			0, "UVP", TFA7x_FAM(tfa, UVDS));
-		tfa98xx_check_status(tfa98xx, tfa9878_irq_stmanalarm,
-			1, "Alarm state", TFA7x_FAM(tfa, MANALARM));
-		mutex_unlock(&tfa98xx->dsp_lock);
+		switch (tfa->rev & 0xff) {
+		case 0x78:
+			mutex_lock(&tfa98xx->dsp_lock);
+			value = TFA7x_READ_REG(tfa,
+				ISTVDDS); /* INTERRUPT_OUT_REG1 */
+			pr_info("%s: [%d] interrupt out: 0x%04x\n",
+				__func__, tfa->dev_idx, value);
+
+			tfa98xx_check_status(tfa98xx, tfa9878_irq_stotds,
+				0, "OTP", TFA7x_FAM(tfa, OTDS));
+			tfa98xx_check_status(tfa98xx, tfa9878_irq_stocpr,
+				1, "OCP", TFA7x_FAM(tfa, OCDS));
+			tfa98xx_check_status(tfa98xx, tfa9878_irq_stuvds,
+				0, "UVP", TFA7x_FAM(tfa, UVDS));
+			tfa98xx_check_status(tfa98xx, tfa9878_irq_stmanalarm,
+				1, "Alarm state", TFA7x_FAM(tfa, MANALARM));
+			mutex_unlock(&tfa98xx->dsp_lock);
+			break;
+		}
 	}
 
 	/* unmask interrupts masked in IRQ handler */

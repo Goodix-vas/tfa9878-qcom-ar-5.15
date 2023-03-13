@@ -89,6 +89,19 @@ struct tfa_irq_name {
 #define TFA2_BF_LP1 TFA9878_BF_LP1
 #define TFA2_BF_R25C TFA9878_BF_R25C
 #define TFA2_BF_SAMMODE -1
+/* for undefined bitfields */
+/*
+ * #define TFA2_BF_IELP0 -1
+ * #define TFA2_BF_ISTLP0 -1
+ * #define TFA2_BF_IPOLP0 -1
+ * #define TFA2_BF_IELP1 -1
+ * #define TFA2_BF_ISTLP1 -1
+ * #define TFA2_BF_IPOLP1 -1
+ * #define TFA2_BF_LP0 -1
+ * #define TFA2_BF_LP1 -1
+ * #define TFA2_BF_R25C -1
+ * #define TFA2_BF_SAMMODE -1
+ */
 
 /* interrupt bit field names of TFA2 and TFA1 do not match */
 #define TFA1_BF_IEACS TFA1_BF_INTENACS
