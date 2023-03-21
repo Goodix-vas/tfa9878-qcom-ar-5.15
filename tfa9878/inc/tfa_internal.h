@@ -44,6 +44,12 @@ enum instream_state {
 void tfanone_ops(struct tfa_device_ops *ops);
 void tfa9878_ops(struct tfa_device_ops *ops);
 
+/* bitfield extraction macros */
+#define TFA_BF_REG(bf) ((bf & (0xff00)) >> 8)
+#define TFA_BF_POS(bf) ((bf & (0xf0)) >> 4)
+#define TFA_BF_WIDTH(bf) ((bf & (0x0f)) + 1)
+#define TFA_BF_MSK(bf) (((1 << TFA_BF_WIDTH(bf)) - 1) << TFA_BF_POS(bf))
+
 enum tfa98xx_error tfa_buffer_pool(struct tfa_device *tfa,
 	int index, int size, int control);
 int tfa98xx_buffer_pool_access(int r_index,

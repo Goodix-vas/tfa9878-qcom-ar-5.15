@@ -15,16 +15,6 @@
 #include "inc/tfa98xx_tfafieldnames.h"
 #include "inc/tfa_internal.h"
 
-/* Defines below are used for irq function (this removed the genregs include) */
-#define TFA98XX_INTERRUPT_ENABLE_REG1		0x48
-#define TFA98XX_INTERRUPT_IN_REG1		0x44
-#define TFA98XX_INTERRUPT_OUT_REG1		0x40
-#define TFA98XX_STATUS_POLARITY_REG1		0x4c
-#define TFA98XX_KEY2_PROTECTED_MTP0_MTPEX_MSK	0x2
-#define TFA98XX_KEY2_PROTECTED_MTP0_MTPOTC_MSK	0x1
-#define TFA98XX_KEY2_PROTECTED_MTP0_MTPEX_POS	1
-#define TFA98XX_KEY2_PROTECTED_MTP0_MTPOTC_POS	0
-
 #ifndef MIN
 #define MIN(A, B) ((A < B) ? A : B)
 #endif
@@ -39,6 +29,9 @@
 /* set intervals */
 #define BUSLOAD_INTERVAL	10
 #define RAMPING_INTERVAL	1
+
+static TFA9878_IRQ_NAMETABLE;
+static TFA9878_IRQ_INFO;
 
 /*
  * static variables
@@ -238,6 +231,52 @@ int tfa_irq_set_pol(struct tfa_device *tfa, int bit, int state)
 	} else {
 		return TFA_ERROR;
 	}
+
+	return 0;
+}
+
+/*
+ * initialize interrupt registers (for single IRQ register)
+ */
+void tfa_irq_init(struct tfa_device *tfa)
+{
+	unsigned short irqmask = tfa->interrupt_enable[0];
+
+	/* disable interrupts */
+	reg_write(tfa, TFA98XX_INTERRUPT_ENABLE_REG1, 0);
+	/* clear all active interrupts */
+	reg_write(tfa, TFA98XX_INTERRUPT_IN_REG1, 0xffff);
+	/* enable interrupts */
+	reg_write(tfa, TFA98XX_INTERRUPT_ENABLE_REG1, irqmask);
+}
+
+/*
+ * report interrupt status (for single IRQ register)
+ * mask and unmask is handled outside this function
+ */
+int tfa_irq_report(struct tfa_device *tfa)
+{
+	uint16_t irqmask, irqstatus, activemask;
+	int irq, rc;
+
+	/* get status bits */
+	rc = reg_read(tfa, TFA98XX_INTERRUPT_OUT_REG1, &irqstatus);
+	if (rc < 0)
+		return -rc;
+
+	/* get the saved mask */
+	irqmask = tfa->interrupt_enable[0];
+	activemask = irqmask & irqstatus;
+
+	for (irq = 0; irq < tfa->irq_max; irq++)
+		if (activemask & (1 << irq))
+			pr_err("%s: device[%d]: interrupt: %s - %s\n",
+				__func__, tfa->dev_idx,
+				tfa98xx_irq_names[irq].irq_name,
+				tfa98xx_irq_info[irq]);
+
+	/* clear active irqs */
+	reg_write(tfa, TFA98XX_INTERRUPT_IN_REG1, activemask);
 
 	return 0;
 }

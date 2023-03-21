@@ -316,6 +316,7 @@ static enum tfa98xx_error tfa9878_specific(struct tfa_device *tfa)
 {
 	enum tfa98xx_error error = TFA98XX_ERROR_OK;
 	unsigned short value, xor;
+	unsigned short irqmask;
 
 	if (tfa->in_use == 0)
 		return TFA98XX_ERROR_NOT_OPEN;
@@ -368,6 +369,14 @@ static enum tfa98xx_error tfa9878_specific(struct tfa_device *tfa)
 			tfa->rev);
 		break;
 	}
+
+	/* select interrupt flags */
+	irqmask = (TFA_BF_MSK(TFA9878_BF_IEOTDS)
+		| TFA_BF_MSK(TFA9878_BF_IEOCPR)
+		| TFA_BF_MSK(TFA9878_BF_IEUVDS)
+		| TFA_BF_MSK(TFA9878_BF_IEMANALARM));
+	tfa->interrupt_enable[0] = irqmask; /* save mask */
+	tfa_irq_init(tfa); /* init irq regs */
 
 	return error;
 }

@@ -3393,19 +3393,7 @@ int tfa_ext_register(dsp_send_message_t tfa_send_message,
 /* Interrupts management */
 static void tfa98xx_interrupt_enable_tfa2(struct tfa98xx *tfa98xx, bool enable)
 {
-	tfa98xx->istatus = 0;
-
-	/* clear all the events before enabling */
-	tfa_irq_clear(tfa98xx->tfa, tfa98xx->tfa->irq_all);
-
-	switch (tfa98xx->tfa->rev & 0xff) {
-	case 0x78:
-		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stotds, enable);
-		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stocpr, enable);
-		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stuvds, enable);
-		tfa_irq_ena(tfa98xx->tfa, tfa9878_irq_stmanalarm, enable);
-		break;
-	}
+	tfa_irq_init(tfa98xx->tfa);
 }
 
 /* global enable / disable interrupts */
@@ -3904,39 +3892,6 @@ static void tfa98xx_dsp_init(struct tfa98xx *tfa98xx)
 	mutex_unlock(&tfa98xx_mutex);
 }
 
-static void tfa98xx_set_irq_status(struct tfa98xx *tfa98xx,
-	int bit, int value, int flag)
-{
-	int mask = 1 << (bit & 0x0f);
-
-	tfa98xx->istatus &= ~mask;
-	tfa98xx->istatus |= (flag & 0x1) << (bit & 0x0f);
-
-	/* value: 0 (active high) / 1 (active low) */
-	tfa_irq_set_pol(tfa98xx->tfa, bit, (value == 0) ? 1 : 0);
-	tfa_irq_clear(tfa98xx->tfa, bit);
-
-	pr_info("%s: status 0x%04x on dev %d\n", __func__,
-		tfa98xx->istatus, tfa98xx->tfa->dev_idx);
-}
-
-static void tfa98xx_check_status(struct tfa98xx *tfa98xx,
-	int flag, int active_value,
-	char *status_name, const uint16_t bfield)
-{
-	struct tfa_device *tfa = tfa98xx->tfa;
-	int value = 0;
-
-	if (tfa_irq_get(tfa, flag)) {
-		/* clear at read */
-		value = tfa_get_bf(tfa, bfield);
-		pr_err("%s: %s is %s!\n", __func__, status_name,
-			(value == active_value) ? "detected" : "restored");
-		tfa98xx_set_irq_status(tfa98xx, flag,
-			0, (value == 0) ? 1 : 0);
-	}
-}
-
 static void tfa98xx_interrupt(struct work_struct *work)
 {
 	struct tfa98xx *tfa98xx0
@@ -3967,25 +3922,9 @@ static void tfa98xx_interrupt(struct work_struct *work)
 		pr_info("%s: status check on dev %d\n", __func__,
 			tfa->dev_idx);
 
-		switch (tfa->rev & 0xff) {
-		case 0x78:
-			mutex_lock(&tfa98xx->dsp_lock);
-			value = TFA7x_READ_REG(tfa,
-				ISTVDDS); /* INTERRUPT_OUT_REG1 */
-			pr_info("%s: [%d] interrupt out: 0x%04x\n",
-				__func__, tfa->dev_idx, value);
-
-			tfa98xx_check_status(tfa98xx, tfa9878_irq_stotds,
-				0, "OTP", TFA7x_FAM(tfa, OTDS));
-			tfa98xx_check_status(tfa98xx, tfa9878_irq_stocpr,
-				1, "OCP", TFA7x_FAM(tfa, OCDS));
-			tfa98xx_check_status(tfa98xx, tfa9878_irq_stuvds,
-				0, "UVP", TFA7x_FAM(tfa, UVDS));
-			tfa98xx_check_status(tfa98xx, tfa9878_irq_stmanalarm,
-				1, "Alarm state", TFA7x_FAM(tfa, MANALARM));
-			mutex_unlock(&tfa98xx->dsp_lock);
-			break;
-		}
+		mutex_lock(&tfa98xx->dsp_lock);
+		tfa_irq_report(tfa);
+		mutex_unlock(&tfa98xx->dsp_lock);
 	}
 
 	/* unmask interrupts masked in IRQ handler */

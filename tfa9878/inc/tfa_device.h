@@ -352,6 +352,14 @@ int tfa_irq_mask(struct tfa_device *tfa);
  * unmask interrupts by enabling them again
  */
 int tfa_irq_unmask(struct tfa_device *tfa);
+/*
+ * initialize interrupt registers
+ */
+void tfa_irq_init(struct tfa_device *tfa);
+/*
+ * report interrupt status
+ */
+int tfa_irq_report(struct tfa_device *tfa);
 
 enum tfa98xx_error tfa_get_fw_api_version(struct tfa_device *tfa,
 	unsigned char *pfw_version);

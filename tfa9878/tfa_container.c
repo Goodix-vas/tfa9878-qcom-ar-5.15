@@ -369,14 +369,14 @@ static struct tfa_volume_step_message_info *
 tfa_cont_get_next_msg_info(struct tfa_volume_step_message_info *msg_info)
 {
 	char *p = (char *)msg_info;
-	int msgLen = tfa_cont_get_msg_len(msg_info);
+	int msg_len = tfa_cont_get_msg_len(msg_info);
 	int type = msg_info->message_type;
 
 	p += sizeof(msg_info->message_type) + sizeof(msg_info->message_length);
 	if (type == 3)
-		p += msgLen;
+		p += msg_len;
 	else
-		p += msgLen * 3;
+		p += msg_len * 3;
 
 	return (struct tfa_volume_step_message_info *)p;
 }
@@ -394,16 +394,16 @@ tfa_cont_get_next_reg_from_end_info
 static struct tfa_volume_step_register_info *
 tfa_cont_get_reg_for_vstep(struct tfa_volume_step_max2_file *vp, int idx)
 {
-	int i, j, nrMessage;
+	int i, j, nr_message;
 	struct tfa_volume_step_register_info *reg_info
 		= (struct tfa_volume_step_register_info *)vp->vsteps_bin;
 	struct tfa_volume_step_message_info *msg_info = NULL;
 
 	for (i = 0; i < idx; i++) {
 		msg_info = tfa_cont_get_msg_info_from_reg(reg_info);
-		nrMessage = msg_info->nr_of_messages;
+		nr_message = msg_info->nr_of_messages;
 
-		for (j = 0; j < nrMessage; j++)
+		for (j = 0; j < nr_message; j++)
 			msg_info = tfa_cont_get_next_msg_info(msg_info);
 		reg_info = tfa_cont_get_next_reg_from_end_info(msg_info);
 	}
