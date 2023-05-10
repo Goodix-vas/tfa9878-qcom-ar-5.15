@@ -193,6 +193,7 @@ struct tfa_device {
 	int active_count;
 	int swprof;
 	int ampgain;
+	int ramp_steps;
 	int individual_msg;
 	int set_device;
 	int set_config;

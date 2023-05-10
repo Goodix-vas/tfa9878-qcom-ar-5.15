@@ -4742,6 +4742,62 @@ static ssize_t tfa98xx_reinit_store(struct device *dev,
 	return count;
 }
 
+static ssize_t tfa98xx_ramp_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct tfa98xx *tfa98xx = dev_get_drvdata(dev);
+	struct tfa_device *tfa = NULL;
+	int count = 0;
+
+	tfa = tfa98xx->tfa;
+	if (!tfa)
+		return -ENODEV;
+	if (tfa->tfa_family == 0) {
+		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
+			tfa98xx->i2c->addr, __func__);
+		return -EIO;
+	}
+
+	pr_debug("[0x%x] ramp_steps : %d\n",
+		tfa98xx->i2c->addr,
+		(tfa->ramp_steps == 0) ? RAMPDOWN_MAX : tfa->ramp_steps);
+	count = snprintf(buf, PAGE_SIZE, "%d\n",
+		(tfa->ramp_steps == 0) ? RAMPDOWN_MAX : tfa->ramp_steps);
+
+	return count;
+}
+
+static ssize_t tfa98xx_ramp_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tfa98xx *tfa98xx = dev_get_drvdata(dev);
+	struct tfa_device *tfa = NULL;
+	int ret = 0, value;
+
+	tfa = tfa98xx->tfa;
+	if (!tfa)
+		return -ENODEV;
+	if (tfa->tfa_family == 0) {
+		pr_err("[0x%x] %s: system is not initialized: not probed yet!\n",
+			tfa98xx->i2c->addr, __func__);
+		return -EIO;
+	}
+
+	/* check string length, and account for eol */
+	if (count < 1)
+		return -EINVAL;
+
+	ret = kstrtou32(buf, 10, &value);
+
+	pr_info("%s: ramp_steps < %d\n", __func__, value);
+
+	mutex_lock(&tfa98xx_mutex);
+	tfa->ramp_steps = value;
+	mutex_unlock(&tfa98xx_mutex);
+
+	return count;
+}
+
 static struct bin_attribute dev_attr_rw = {
 	.attr = {
 		.name = "rw",
@@ -4787,6 +4843,15 @@ static struct device_attribute dev_attr_reinit = {
 	},
 	.show = tfa98xx_reinit_show,
 	.store = tfa98xx_reinit_store,
+};
+
+static struct device_attribute dev_attr_ramp = {
+	.attr = {
+		.name = "ramp",
+		.mode = 0600,
+	},
+	.show = tfa98xx_ramp_show,
+	.store = tfa98xx_ramp_store,
 };
 
 struct tfa_device *tfa98xx_get_tfa_device_from_index(int index)
@@ -5335,6 +5400,10 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	ret = device_create_file(&i2c->dev, &dev_attr_reinit);
 	if (ret)
 		dev_info(&i2c->dev, "error creating sysfs node, reinit\n");
+
+	ret = device_create_file(&i2c->dev, &dev_attr_ramp);
+	if (ret)
+		dev_info(&i2c->dev, "error creating sysfs node, ramp\n");
 
 	pr_info("%s Probe completed successfully!\n", __func__);
 

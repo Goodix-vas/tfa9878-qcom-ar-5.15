@@ -324,6 +324,7 @@ void tfa_set_query_info(struct tfa_device *tfa)
 	tfa->active_count = -1;
 	tfa->swprof = -1;
 	tfa->ampgain = -1;
+	tfa->ramp_steps = 0; /* default (voided if negative) */
 	tfa->individual_msg = 0;
 	tfa->fw_itf_ver[0] = 0xff;
 	tfa->fw_lib_ver[0] = 0xff;
@@ -3510,13 +3511,17 @@ enum tfa98xx_error tfa_run_mute(struct tfa_device *tfa)
 	int status;
 	int tries = 0;
 	int i = 0, cur_ampe;
+	int steps = tfa->ramp_steps;
+
+	if (steps == 0) /* default steps */
+		steps = RAMPDOWN_MAX;
 
 	cur_ampe = TFA_GET_BF(tfa, AMPE);
-	if (cur_ampe == 0)
+	if (cur_ampe == 0 || steps <= 0)
 		tfa_gain_rampdown(tfa, 0, -1);
 	else
-		for (i = 0; i < RAMPDOWN_MAX; i++) {
-			ret = tfa_gain_rampdown(tfa, i, RAMPDOWN_MAX);
+		for (i = 0; i < steps; i++) {
+			ret = tfa_gain_rampdown(tfa, i, steps);
 			if (ret == TFA98XX_ERROR_OTHER)
 				break;
 			usleep_range(RAMPING_INTERVAL * 1000,
@@ -3566,22 +3571,8 @@ enum tfa98xx_error tfa_run_unmute(struct tfa_device *tfa)
 {
 	enum tfa98xx_error ret = TFA98XX_ERROR_OK;
 	enum tfa_error err = tfa_error_ok;
-
-	if (tfa->ampgain != -1) {
-		int i = 0, cur_ampe;
-
-		cur_ampe = TFA_GET_BF(tfa, AMPE);
-		if (cur_ampe == 0)
-			tfa_gain_restore(tfa, 0, -1);
-		else
-			for (i = 0; i < RAMPDOWN_MAX; i++) {
-				ret = tfa_gain_restore(tfa, i, RAMPDOWN_MAX);
-				if (ret == TFA98XX_ERROR_OTHER)
-					break;
-				usleep_range(RAMPING_INTERVAL * 1000,
-					RAMPING_INTERVAL * 1000 + 5);
-			}
-	}
+	int i = 0, cur_ampe;
+	int steps = tfa->ramp_steps;
 
 	/* signal the TFA98XX to mute */
 	/* err = tfa98xx_set_mute(tfa, TFA98XX_MUTE_OFF); */
@@ -3590,6 +3581,23 @@ enum tfa98xx_error tfa_run_unmute(struct tfa_device *tfa)
 		pr_err("%s: failed to set unmute state (err %d)\n",
 			__func__, err);
 		return TFA98XX_ERROR_OTHER;
+	}
+
+	if (tfa->ampgain != -1) {
+		if (steps == 0) /* default steps */
+			steps = RAMPDOWN_MAX;
+
+		cur_ampe = TFA_GET_BF(tfa, AMPE);
+		if (cur_ampe == 0 || steps <= 0)
+			tfa_gain_restore(tfa, 0, -1);
+		else
+			for (i = 0; i < steps; i++) {
+				ret = tfa_gain_restore(tfa, i, steps);
+				if (ret == TFA98XX_ERROR_OTHER)
+					break;
+				usleep_range(RAMPING_INTERVAL * 1000,
+					RAMPING_INTERVAL * 1000 + 5);
+			}
 	}
 
 	if (tfa->verbose)
