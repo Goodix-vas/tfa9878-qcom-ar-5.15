@@ -368,9 +368,7 @@ enum tfa98xx_error tfa_get_fw_lib_version(struct tfa_device *tfa,
 	unsigned char *plib_version);
 
 #define RAMPDOWN_MAX 2 /* 5 or higher if usleep_range works */
-enum tfa98xx_error tfa_gain_rampdown(struct tfa_device *tfa,
-	int step, int count);
-enum tfa98xx_error tfa_gain_restore(struct tfa_device *tfa,
-	int step, int count);
+enum tfa98xx_error tfa_gain_rampdown(struct tfa_device *tfa, int count);
+enum tfa98xx_error tfa_gain_restore(struct tfa_device *tfa, int count);
 
 #endif /* __TFA_DEVICE_H__ */

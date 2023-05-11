@@ -3510,7 +3510,7 @@ enum tfa98xx_error tfa_run_mute(struct tfa_device *tfa)
 	enum tfa_error err = tfa_error_ok;
 	int status;
 	int tries = 0;
-	int i = 0, cur_ampe;
+	int cur_ampe;
 	int steps = tfa->ramp_steps;
 
 	if (steps == 0) /* default steps */
@@ -3518,15 +3518,9 @@ enum tfa98xx_error tfa_run_mute(struct tfa_device *tfa)
 
 	cur_ampe = TFA_GET_BF(tfa, AMPE);
 	if (cur_ampe == 0 || steps <= 0)
-		tfa_gain_rampdown(tfa, 0, -1);
+		tfa_gain_rampdown(tfa, -1);
 	else
-		for (i = 0; i < steps; i++) {
-			ret = tfa_gain_rampdown(tfa, i, steps);
-			if (ret == TFA98XX_ERROR_OTHER)
-				break;
-			usleep_range(RAMPING_INTERVAL * 1000,
-				RAMPING_INTERVAL * 1000 + 5);
-		}
+		ret = tfa_gain_rampdown(tfa, steps);
 
 	/* signal the TFA98XX to mute */
 	/* err = tfa98xx_set_mute(tfa, TFA98XX_MUTE_AMPLIFIER); */
@@ -3571,7 +3565,7 @@ enum tfa98xx_error tfa_run_unmute(struct tfa_device *tfa)
 {
 	enum tfa98xx_error ret = TFA98XX_ERROR_OK;
 	enum tfa_error err = tfa_error_ok;
-	int i = 0, cur_ampe;
+	int cur_ampe;
 	int steps = tfa->ramp_steps;
 
 	/* signal the TFA98XX to mute */
@@ -3589,15 +3583,9 @@ enum tfa98xx_error tfa_run_unmute(struct tfa_device *tfa)
 
 		cur_ampe = TFA_GET_BF(tfa, AMPE);
 		if (cur_ampe == 0 || steps <= 0)
-			tfa_gain_restore(tfa, 0, -1);
+			tfa_gain_restore(tfa, -1);
 		else
-			for (i = 0; i < steps; i++) {
-				ret = tfa_gain_restore(tfa, i, steps);
-				if (ret == TFA98XX_ERROR_OTHER)
-					break;
-				usleep_range(RAMPING_INTERVAL * 1000,
-					RAMPING_INTERVAL * 1000 + 5);
-			}
+			ret = tfa_gain_restore(tfa, steps);
 	}
 
 	if (tfa->verbose)
@@ -3606,11 +3594,10 @@ enum tfa98xx_error tfa_run_unmute(struct tfa_device *tfa)
 	return ret;
 }
 
-enum tfa98xx_error tfa_gain_rampdown(struct tfa_device *tfa,
-	int step, int count)
+enum tfa98xx_error tfa_gain_rampdown(struct tfa_device *tfa, int count)
 {
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
-	int cur_ampgain;
+	int step = 0, cur_ampgain, value = 0;
 
 	if (tfa->tfa_family != 2) {
 		pr_debug("%s: rampdown only for tfa2\n",
@@ -3618,21 +3605,19 @@ enum tfa98xx_error tfa_gain_rampdown(struct tfa_device *tfa,
 		return TFA98XX_ERROR_BAD_PARAMETER;
 	}
 
-	if (step == 0) {
-		cur_ampgain = TFA7x_GET_BF(tfa, AMPGAIN);
-		if (cur_ampgain <= 0) {
-			pr_debug("%s: ampgain is already rampdown (%d)\n",
-				__func__, cur_ampgain);
-			return TFA98XX_ERROR_OTHER;
-		}
-		tfa->ampgain = cur_ampgain;
-		if (count < 0)
-			pr_debug("%s: direct drop ampgain (%d to 0)\n",
-				__func__, tfa->ampgain);
-		else
-			pr_debug("%s: ramp down ampgain (%d)\n",
-				__func__, tfa->ampgain);
+	cur_ampgain = TFA7x_GET_BF(tfa, AMPGAIN);
+	if (cur_ampgain <= 0) {
+		pr_debug("%s: ampgain is already rampdown (%d)\n",
+			__func__, cur_ampgain);
+		return TFA98XX_ERROR_OTHER;
 	}
+	tfa->ampgain = cur_ampgain;
+	if (count < 0)
+		pr_debug("%s: direct drop ampgain (%d to 0)\n",
+			__func__, tfa->ampgain);
+	else
+		pr_debug("%s: ramp down ampgain (%d)\n",
+			__func__, tfa->ampgain);
 
 	if (tfa->ampgain == -1) {
 		pr_debug("%s: reference gain is not valid\n", __func__);
@@ -3640,23 +3625,38 @@ enum tfa98xx_error tfa_gain_rampdown(struct tfa_device *tfa,
 	}
 
 	/* ramp down amplifier gain for "count" msec */
-	if (count < 0) /* direct set */
+	if (count >= 0) {
+		/* stepwise set */
+		for (step = 0; step < count; step++) {
+			value = tfa->ampgain >> (step + 1);
+			err = TFA7x_SET_BF(tfa, AMPGAIN, value);
+			if (err) {
+				pr_err("%s: error in setting AMPGAIN\n",
+					__func__);
+				return err;
+			}
+
+			usleep_range(RAMPING_INTERVAL * 1000,
+				RAMPING_INTERVAL * 1000 + 5);
+		}
+		if (value > 0)
+			count = -1; /* to set 0 at final step */
+	}
+
+	if (count < 0) { /* direct set */
 		err = TFA7x_SET_BF(tfa, AMPGAIN, 0);
-	else /* stepwise set */
-		err = TFA7x_SET_BF(tfa, AMPGAIN,
-			tfa->ampgain * (count - step - 1) / count);
-	if (err)
-		pr_err("%s: error in setting AMPGAIN\n",
-			__func__);
+		if (err)
+			pr_err("%s: error in setting AMPGAIN\n",
+				__func__);
+	}
 
 	return err;
 }
 
-enum tfa98xx_error tfa_gain_restore(struct tfa_device *tfa,
-	int step, int count)
+enum tfa98xx_error tfa_gain_restore(struct tfa_device *tfa, int count)
 {
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
-	int cur_ampgain;
+	int step = 0, cur_ampgain, value = 0;
 
 	if (tfa->tfa_family != 2) {
 		pr_debug("%s: restore only for tfa2\n",
@@ -3676,24 +3676,30 @@ enum tfa98xx_error tfa_gain_restore(struct tfa_device *tfa,
 	}
 
 	/* stepwise set */
-	if (step == 0) {
-		cur_ampgain = TFA7x_GET_BF(tfa, AMPGAIN);
-		if ((cur_ampgain == tfa->ampgain)
-			|| (cur_ampgain > 0 && tfa->ampgain == -1)) {
-			pr_debug("%s: ampgain is already restorted (%d; %d)\n",
-				__func__, cur_ampgain, tfa->ampgain);
-			return TFA98XX_ERROR_OTHER;
-		}
-		pr_debug("%s: restore ampgain (%d)\n",
-			__func__, tfa->ampgain);
+	cur_ampgain = TFA7x_GET_BF(tfa, AMPGAIN);
+	if ((cur_ampgain == tfa->ampgain)
+		|| (cur_ampgain > 0 && tfa->ampgain == -1)) {
+		pr_debug("%s: ampgain is already restorted (%d; %d)\n",
+			__func__, cur_ampgain, tfa->ampgain);
+		return TFA98XX_ERROR_OTHER;
 	}
+	pr_debug("%s: restore ampgain (%d)\n",
+		__func__, tfa->ampgain);
 
 	/* ramp up amplifier gain for "count" msec */
-	err = TFA7x_SET_BF(tfa, AMPGAIN,
-		tfa->ampgain * (step + 1) / count);
-	if (err)
-		pr_err("%s: error in setting AMPGAIN\n",
-			__func__);
+	/* stepwise set */
+	for (step = 0; step < count; step++) {
+		value = tfa->ampgain >> (count - step - 1);
+		err = TFA7x_SET_BF(tfa, AMPGAIN, value);
+		if (err) {
+			pr_err("%s: error in setting AMPGAIN\n",
+				__func__);
+			return err;
+		}
+
+		usleep_range(RAMPING_INTERVAL * 1000,
+			RAMPING_INTERVAL * 1000 + 5);
+	}
 
 	return err;
 }
@@ -4177,19 +4183,13 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 
 	/* restore amplifier gain, if it's touched before */
 	if (tfa->ampgain != -1) {
-		int i = 0, cur_ampe;
+		int cur_ampe;
 
 		cur_ampe = TFA_GET_BF(tfa, AMPE);
 		if (cur_ampe == 0)
-			tfa_gain_restore(tfa, 0, -1);
+			tfa_gain_restore(tfa, -1);
 		else
-			for (i = 0; i < RAMPDOWN_MAX; i++) {
-				err = tfa_gain_restore(tfa, i, RAMPDOWN_MAX);
-				if (err == TFA98XX_ERROR_OTHER)
-					break;
-				usleep_range(RAMPING_INTERVAL * 1000,
-					RAMPING_INTERVAL * 1000 + 5);
-			}
+			err = tfa_gain_restore(tfa, RAMPDOWN_MAX);
 	}
 	tfa->ampgain = -1;
 
