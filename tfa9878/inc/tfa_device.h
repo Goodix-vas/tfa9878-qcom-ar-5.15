@@ -354,11 +354,11 @@ int tfa_irq_mask(struct tfa_device *tfa);
  */
 int tfa_irq_unmask(struct tfa_device *tfa);
 /*
- * initialize interrupt registers
+ * initialize interrupt registers (for single IRQ register)
  */
 void tfa_irq_init(struct tfa_device *tfa);
 /*
- * report interrupt status
+ * report interrupt status (for single IRQ register)
  */
 int tfa_irq_report(struct tfa_device *tfa);
 
@@ -367,7 +367,8 @@ enum tfa98xx_error tfa_get_fw_api_version(struct tfa_device *tfa,
 enum tfa98xx_error tfa_get_fw_lib_version(struct tfa_device *tfa,
 	unsigned char *plib_version);
 
-#define RAMPDOWN_MAX 2 /* 5 or higher if usleep_range works */
+#define RAMPDOWN_SHORT 2
+#define RAMPDOWN_DEFAULT 5 /* 5 or higher if usleep_range works */
 enum tfa98xx_error tfa_gain_rampdown(struct tfa_device *tfa, int count);
 enum tfa98xx_error tfa_gain_restore(struct tfa_device *tfa, int count);
 

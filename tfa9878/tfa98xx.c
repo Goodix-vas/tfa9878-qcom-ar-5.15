@@ -1365,6 +1365,7 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 	int cal_profile = 0;
 	u16 temp_val = DEFAULT_REF_TEMP; /* default */
 	int temp_calflag = 0;
+	int ramp_steps;
 
 	pr_info("%s: begin\n", __func__);
 
@@ -1399,7 +1400,10 @@ static int tfa98xx_run_calibration(struct tfa98xx *tfa98xx0)
 			tfa->set_active = 1;
 
 		/* force to mute amplifier to flush buffer */
+		ramp_steps = tfa->ramp_steps;
+		tfa->ramp_steps = RAMPDOWN_SHORT;
 		tfa_run_mute(tfa);
+		tfa->ramp_steps = ramp_steps;
 	}
 
 	/* wait before restarting for calibration */
@@ -4606,7 +4610,7 @@ static ssize_t tfa98xx_gain_show(struct device *dev,
 static ssize_t tfa98xx_gain_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
-	/* to prevent attack to tfa98xx_re25_store */
+	/* to prevent attack to tfa98xx_gain_store */
 	return count;
 }
 
@@ -4747,7 +4751,7 @@ static ssize_t tfa98xx_ramp_show(struct device *dev,
 {
 	struct tfa98xx *tfa98xx = dev_get_drvdata(dev);
 	struct tfa_device *tfa = NULL;
-	int count = 0;
+	int count = 0, value;
 
 	tfa = tfa98xx->tfa;
 	if (!tfa)
@@ -4758,11 +4762,10 @@ static ssize_t tfa98xx_ramp_show(struct device *dev,
 		return -EIO;
 	}
 
+	value = (tfa->ramp_steps == 0) ? RAMPDOWN_DEFAULT : tfa->ramp_steps;
 	pr_debug("[0x%x] ramp_steps : %d\n",
-		tfa98xx->i2c->addr,
-		(tfa->ramp_steps == 0) ? RAMPDOWN_MAX : tfa->ramp_steps);
-	count = snprintf(buf, PAGE_SIZE, "%d\n",
-		(tfa->ramp_steps == 0) ? RAMPDOWN_MAX : tfa->ramp_steps);
+		tfa98xx->i2c->addr, value);
+	count = snprintf(buf, PAGE_SIZE, "%d\n", value);
 
 	return count;
 }

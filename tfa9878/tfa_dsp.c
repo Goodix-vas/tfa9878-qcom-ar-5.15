@@ -3514,7 +3514,7 @@ enum tfa98xx_error tfa_run_mute(struct tfa_device *tfa)
 	int steps = tfa->ramp_steps;
 
 	if (steps == 0) /* default steps */
-		steps = RAMPDOWN_MAX;
+		steps = RAMPDOWN_DEFAULT;
 
 	cur_ampe = TFA_GET_BF(tfa, AMPE);
 	if (cur_ampe == 0 || steps <= 0)
@@ -3579,7 +3579,7 @@ enum tfa98xx_error tfa_run_unmute(struct tfa_device *tfa)
 
 	if (tfa->ampgain != -1) {
 		if (steps == 0) /* default steps */
-			steps = RAMPDOWN_MAX;
+			steps = RAMPDOWN_DEFAULT;
 
 		cur_ampe = TFA_GET_BF(tfa, AMPE);
 		if (cur_ampe == 0 || steps <= 0)
@@ -4189,7 +4189,7 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa,
 		if (cur_ampe == 0)
 			tfa_gain_restore(tfa, -1);
 		else
-			err = tfa_gain_restore(tfa, RAMPDOWN_MAX);
+			err = tfa_gain_restore(tfa, RAMPDOWN_SHORT);
 	}
 	tfa->ampgain = -1;
 
@@ -4418,12 +4418,15 @@ enum tfa_error tfa_dev_switch_profile(struct tfa_device *tfa,
 enum tfa_error tfa_dev_stop(struct tfa_device *tfa)
 {
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
+	int ramp_steps = tfa->ramp_steps;
 
 	pr_debug("Stopping device [%s]\n",
 		tfa_cont_device_name(tfa->cnt, tfa->dev_idx));
 
 	/* mute */
+	tfa->ramp_steps = RAMPDOWN_SHORT;
 	tfa_run_mute(tfa);
+	tfa->ramp_steps = ramp_steps;
 
 	/* Make sure internal oscillator is not running
 	 * for DSP devices (non-dsp and max1 this is no-op)
